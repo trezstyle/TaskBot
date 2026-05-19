@@ -27,12 +27,14 @@ public class MeetingService {
     private final MeetingRepository meetingRepository;
     private final MeetingMapper meetingMapper;
     private final UserService userService;
+    private final ReminderService reminderService;
 
     @Transactional
     public MeetingDto createMeeting(Long telegramId, CreateMeetingRequest request) {
         User user = userService.getUserByTelegramId(telegramId);
         Meeting meeting = meetingMapper.toEntity(request, user);
         Meeting saved = meetingRepository.save(meeting);
+        reminderService.createMeetingReminder(saved);
         log.info("Meeting created: id={}, userId={}", saved.getId(), user.getId());
         return meetingMapper.toDto(saved);
     }

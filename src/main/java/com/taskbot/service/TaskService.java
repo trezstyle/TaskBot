@@ -27,6 +27,7 @@ public class TaskService {
     private final TaskRepository taskRepository;
     private final TaskMapper taskMapper;
     private final UserService userService;
+    private final ReminderService reminderService;
 
     @Transactional
     public TaskDto createTask(Long telegramId, CreateTaskRequest request) {
@@ -41,6 +42,7 @@ public class TaskService {
         }
 
         Task saved = taskRepository.save(task);
+        reminderService.createTaskReminders(saved);
         log.info("Task created: id={}, userId={}", saved.getId(), user.getId());
         return taskMapper.toDto(saved);
     }
