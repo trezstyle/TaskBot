@@ -1,15 +1,13 @@
 package com.taskbot.service;
 
-import com.taskbot.dto.MeetingDto;
-import com.taskbot.dto.NoteDto;
 import com.taskbot.dto.TaskDto;
 import com.taskbot.dto.request.CreateTaskRequest;
 import com.taskbot.dto.request.UpdateTaskRequest;
 import com.taskbot.dto.request.UpdateUserSettingsRequest;
-import com.taskbot.entity.Reminder;
 import com.taskbot.entity.Task;
 import com.taskbot.entity.User;
 import com.taskbot.security.RateLimitingService;
+import com.taskbot.util.CalendarBuilder;
 import com.taskbot.util.TelegramMenuBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,7 +47,7 @@ public class TelegramBotService {
     private final Map<Long, String> userStates = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, String>> userTempData = new ConcurrentHashMap<>();
 
-    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
 
     public void processUpdate(Update update) {
@@ -85,20 +83,21 @@ public class TelegramBotService {
         }
 
         if ("/start".equals(text)) {
-            sendMainMenu(telegramId, "Welcome to TaskBot! Choose an option:");
+            sendMainMenu(telegramId, "👋 Добро пожаловать в TaskBot!\n\nУправляйте задачами, встречами, записями к врачу и заметками в одном месте.");
         } else if ("/tasks".equals(text)) {
-            sendMessage(telegramId, "Tasks menu:", TelegramMenuBuilder.buildTasksMenu());
+            sendMessage(telegramId, "📋 Управление задачами:", TelegramMenuBuilder.buildTasksMenu());
         } else if ("/help".equals(text)) {
             sendMessage(telegramId, """
-                    TaskBot Commands:
-                    /start - Main menu
-                    /tasks - Task management
-                    /help - This help message
+                    📖 Доступные команды:
                     
-                    Use the inline buttons to navigate.
+                    /start - Главное меню
+                    /tasks - Управление задачами
+                    /help - Эта справка
+                    
+                    💡 Используйте кнопки для навигации.
                     """, null);
         } else {
-            sendMessage(telegramId, "Use /start to see the main menu.", null);
+            sendMessage(telegramId, "🤔 Неизвестная команда. Используйте /start для главного меню.", null);
         }
     }
 
@@ -115,166 +114,229 @@ public class TelegramBotService {
                 callbackQuery.getFrom().getLastName()
         );
 
-        if (data.equals("MENU_MAIN")) {
-            userStates.remove(telegramId);
-            editMessage(telegramId, messageId, "Main menu:", TelegramMenuBuilder.buildMainMenu());
-            return;
+        switch (data) {
+            case "MENU_MAIN" -> {
+                userStates.remove(telegramId);
+                editMessage(telegramId, messageId, "🏠 Главное меню:", TelegramMenuBuilder.buildMainMenu());
+            }
+            case "MENU_TASKS" -> editMessage(telegramId, messageId, "📋 Управление задачами:", TelegramMenuBuilder.buildTasksMenu());
+            case "MENU_MEETINGS" -> editMessage(telegramId, messageId, "📅 Управление встречами:", TelegramMenuBuilder.buildMeetingsMenu());
+            case "MENU_NOTES" -> editMessage(telegramId, messageId, "📝 Управление заметками:", TelegramMenuBuilder.buildNotesMenu());
+            case "MENU_DOCTORS" -> editMessage(telegramId, messageId, "👨‍⚕️ Управление записями:", TelegramMenuBuilder.buildDoctorsMenu());
+            case "MENU_REMINDERS" -> editMessage(telegramId, messageId, "🔔 Напоминания:", TelegramMenuBuilder.buildRemindersMenu());
+            case "MENU_SETTINGS" -> showSettings(telegramId, messageId);
+            case "TASKS_LIST" -> showTasksList(telegramId, messageId, 0);
+            case "TASKS_CREATE" -> {
+                userStates.put(telegramId, "AWAITING_TASK_TITLE");
+                editMessage(telegramId, messageId, "📝 Введите название задачи:", null);
+            }
+            case "TASKS_OVERDUE" -> showOverdueTasks(telegramId, messageId);
+            case "TASKS_FILTER_TODO" -> showTasksByStatus(telegramId, messageId, Task.Status.TODO);
+            case "TASKS_FILTER_IN_PROGRESS" -> showTasksByStatus(telegramId, messageId, Task.Status.IN_PROGRESS);
+            case "TASKS_FILTER_DONE" -> showTasksByStatus(telegramId, messageId, Task.Status.DONE);
+            case "MEETINGS_LIST" -> showMeetingsList(telegramId, messageId, 0);
+            case "MEETINGS_CREATE" -> {
+                userStates.put(telegramId, "AWAITING_MEETING_TITLE");
+                editMessage(telegramId, messageId, "📅 Введите название встречи:", null);
+            }
+            case "NOTES_LIST" -> showNotesList(telegramId, messageId, 0);
+            case "NOTES_CREATE" -> {
+                userStates.put(telegramId, "AWAITING_NOTE_TITLE");
+                editMessage(telegramId, messageId, "📝 Введите название заметки:", null);
+            }
+            case "NOTES_SEARCH" -> {
+                userStates.put(telegramId, "AWAITING_NOTE_SEARCH");
+                editMessage(telegramId, messageId, "🔍 Введите поисковый запрос:", null);
+            }
+            case "NOTES_CATEGORIES" -> showNoteCategories(telegramId, messageId);
+            case "DOCTORS_LIST" -> showDoctorAppointments(telegramId, messageId, 0);
+            case "DOCTORS_CREATE" -> {
+                userStates.put(telegramId, "AWAITING_DOCTOR_NAME");
+                editMessage(telegramId, messageId, "👨‍⚕️ Введите имя врача:", null);
+            }
+            case "REMINDERS_LIST" -> showRemindersList(telegramId, messageId);
+            case "SETTINGS_LANGUAGE" -> {
+                userStates.put(telegramId, "AWAITING_LANGUAGE");
+                editMessage(telegramId, messageId, "🌐 Введите код языка (ru, en, de и т.д.):", null);
+            }
+            case "SETTINGS_TIMEZONE" -> {
+                userStates.put(telegramId, "AWAITING_TIMEZONE");
+                editMessage(telegramId, messageId, "🕐 Введите часовой пояс (например: Europe/Moscow):", null);
+            }
+            case "SETTINGS_NOTIFICATIONS" -> {
+                User user = userService.getUserByTelegramId(telegramId);
+                UpdateUserSettingsRequest request = UpdateUserSettingsRequest.builder()
+                        .notificationsEnabled(!user.getNotificationsEnabled())
+                        .build();
+                userService.updateSettings(telegramId, request);
+                showSettings(telegramId, messageId);
+            }
+            default -> {
+                if (data.startsWith("TASK_STATUS_")) {
+                    handleTaskStatusChange(telegramId, messageId, data);
+                } else if (data.startsWith("TASK_DELETE_")) {
+                    handleTaskDelete(telegramId, messageId, data);
+                } else if (data.startsWith("TASK_VIEW_")) {
+                    handleTaskView(telegramId, messageId, data);
+                } else if (data.startsWith("TASKS_PAGE_")) {
+                    int page = Integer.parseInt(data.split("_")[2]);
+                    showTasksList(telegramId, messageId, page);
+                } else if (data.startsWith("CALENDAR_")) {
+                    handleCalendarAction(telegramId, messageId, data);
+                } else if (data.startsWith("TIME_")) {
+                    handleTimeAction(telegramId, messageId, data);
+                } else if (data.startsWith("PRIORITY_")) {
+                    handlePrioritySelection(telegramId, messageId, data);
+                }
+            }
         }
+    }
 
-        if (data.equals("MENU_TASKS")) {
-            editMessage(telegramId, messageId, "Tasks:", TelegramMenuBuilder.buildTasksMenu());
-            return;
+    private void handleCalendarAction(Long telegramId, Integer messageId, String data) {
+        String[] parts = data.split("_");
+        String action = parts[1];
+        String context = parts.length > 2 ? parts[2] : "";
+
+        Map<String, String> tempData = userTempData.get(telegramId);
+        LocalDate currentDate = tempData != null && tempData.containsKey("calendarDate")
+                ? LocalDate.parse(tempData.get("calendarDate"))
+                : LocalDate.now();
+
+        switch (action) {
+            case "PREV_MONTH" -> {
+                currentDate = currentDate.minusMonths(1);
+                if (tempData != null) tempData.put("calendarDate", currentDate.toString());
+                editMessage(telegramId, messageId, "📅 Выберите дату:", CalendarBuilder.buildCalendar(currentDate, "CALENDAR"));
+            }
+            case "NEXT_MONTH" -> {
+                currentDate = currentDate.plusMonths(1);
+                if (tempData != null) tempData.put("calendarDate", currentDate.toString());
+                editMessage(telegramId, messageId, "📅 Выберите дату:", CalendarBuilder.buildCalendar(currentDate, "CALENDAR"));
+            }
+            case "SELECT" -> {
+                LocalDate selectedDate = LocalDate.parse(parts[3]);
+                if (tempData != null) {
+                    tempData.put("selectedDate", selectedDate.toString());
+                    String step = tempData.get("nextStep");
+                    if ("MEETING_TIME".equals(step)) {
+                        tempData.put("calendarMode", "MEETING");
+                        editMessage(telegramId, messageId, "🕐 Выберите время:", CalendarBuilder.buildTimePicker("TIME"));
+                    } else if ("DOCTOR_TIME".equals(step)) {
+                        tempData.put("calendarMode", "DOCTOR");
+                        editMessage(telegramId, messageId, "🕐 Выберите время:", CalendarBuilder.buildTimePicker("TIME"));
+                    } else if ("TASK_DUE".equals(step)) {
+                        createTaskWithCalendarDate(telegramId, messageId, selectedDate);
+                    }
+                }
+            }
         }
+    }
 
-        if (data.equals("MENU_MEETINGS")) {
-            editMessage(telegramId, messageId, "Meetings:", TelegramMenuBuilder.buildMeetingsMenu());
-            return;
+    private void handleTimeAction(Long telegramId, Integer messageId, String data) {
+        String[] parts = data.split("_");
+        String action = parts[1];
+        String value = parts.length > 2 ? parts[2] : "";
+
+        Map<String, String> tempData = userTempData.get(telegramId);
+        if (tempData == null) return;
+
+        switch (action) {
+            case "HOUR" -> {
+                tempData.put("selectedHour", value);
+                editMessage(telegramId, messageId, "🕐 Выберите минуты:", CalendarBuilder.buildTimePicker("TIME"));
+            }
+            case "MINUTE" -> {
+                String hour = tempData.get("selectedHour");
+                String minute = value;
+                LocalTime time = LocalTime.of(Integer.parseInt(hour), Integer.parseInt(minute));
+                tempData.put("selectedTime", time.toString());
+
+                String mode = tempData.get("calendarMode");
+                if ("MEETING".equals(mode)) {
+                    createMeetingWithCalendarData(telegramId, messageId);
+                } else if ("DOCTOR".equals(mode)) {
+                    createDoctorWithCalendarData(telegramId, messageId);
+                }
+            }
         }
+    }
 
-        if (data.equals("MENU_NOTES")) {
-            editMessage(telegramId, messageId, "Notes:", TelegramMenuBuilder.buildNotesMenu());
-            return;
+    private void handlePrioritySelection(Long telegramId, Integer messageId, String data) {
+        String priority = data.split("_")[1];
+        Map<String, String> tempData = userTempData.get(telegramId);
+        if (tempData != null) {
+            tempData.put("priority", priority);
+            showCalendarForTaskDueDate(telegramId, messageId);
         }
+    }
 
-        if (data.equals("MENU_DOCTORS")) {
-            editMessage(telegramId, messageId, "Doctors:", TelegramMenuBuilder.buildDoctorsMenu());
-            return;
-        }
+    private void showCalendarForTaskDueDate(Long telegramId, Integer messageId) {
+        Map<String, String> tempData = userTempData.get(telegramId);
+        if (tempData == null) return;
 
-        if (data.equals("MENU_REMINDERS")) {
-            editMessage(telegramId, messageId, "Reminders:", TelegramMenuBuilder.buildRemindersMenu());
-            return;
-        }
+        tempData.put("nextStep", "TASK_DUE");
+        editMessage(telegramId, messageId, "📅 Выберите дедлайн:", CalendarBuilder.buildCalendar(LocalDate.now(), "CALENDAR"));
+    }
 
-        if (data.equals("MENU_SETTINGS")) {
-            showSettings(telegramId, messageId);
-            return;
-        }
+    private void createTaskWithCalendarDate(Long telegramId, Integer messageId, LocalDate dueDate) {
+        Map<String, String> tempData = userTempData.get(telegramId);
+        if (tempData == null) return;
 
-        if (data.equals("TASKS_LIST")) {
-            showTasksList(telegramId, messageId, 0);
-            return;
-        }
+        CreateTaskRequest request = CreateTaskRequest.builder()
+                .title(tempData.get("title"))
+                .description(tempData.get("description"))
+                .priority(tempData.containsKey("priority") ?
+                        Task.Priority.valueOf(tempData.get("priority")) : Task.Priority.MEDIUM)
+                .dueDate(dueDate)
+                .build();
 
-        if (data.equals("TASKS_CREATE")) {
-            userStates.put(telegramId, "AWAITING_TASK_TITLE");
-            editMessage(telegramId, messageId, "Enter task title:", null);
-            return;
-        }
+        TaskDto task = taskService.createTask(telegramId, request);
+        userStates.remove(telegramId);
+        userTempData.remove(telegramId);
+        sendMessage(telegramId, "✅ Задача создана!\n\n" + formatTask(task), TelegramMenuBuilder.buildTasksMenu());
+    }
 
-        if (data.equals("TASKS_OVERDUE")) {
-            showOverdueTasks(telegramId, messageId);
-            return;
-        }
+    private void createMeetingWithCalendarData(Long telegramId, Integer messageId) {
+        Map<String, String> tempData = userTempData.get(telegramId);
+        if (tempData == null) return;
 
-        if (data.equals("TASKS_BY_STATUS")) {
-            showTaskStatusFilter(telegramId, messageId);
-            return;
-        }
+        LocalDate date = LocalDate.parse(tempData.get("selectedDate"));
+        LocalTime time = LocalTime.parse(tempData.get("selectedTime"));
 
-        if (data.startsWith("TASK_STATUS_")) {
-            String[] parts = data.split("_");
-            Long taskId = Long.parseLong(parts[2]);
-            Task.Status status = Task.Status.valueOf(parts[3]);
-            UpdateTaskRequest request = UpdateTaskRequest.builder().status(status).build();
-            taskService.updateTask(taskId, telegramId, request);
-            showTasksList(telegramId, messageId, 0);
-            return;
-        }
+        // Create meeting
+        com.taskbot.dto.request.CreateMeetingRequest request = com.taskbot.dto.request.CreateMeetingRequest.builder()
+                .title(tempData.get("title"))
+                .meetingDate(date)
+                .meetingTime(time)
+                .location(tempData.get("location"))
+                .build();
 
-        if (data.startsWith("TASK_DELETE_")) {
-            Long taskId = Long.parseLong(data.split("_")[2]);
-            taskService.deleteTask(taskId, telegramId);
-            editMessage(telegramId, messageId, "Task deleted.", TelegramMenuBuilder.buildTasksMenu());
-            return;
-        }
+        meetingService.createMeeting(telegramId, request);
+        userStates.remove(telegramId);
+        userTempData.remove(telegramId);
+        sendMessage(telegramId, "✅ Встреча создана!\n\n📅 " + date.format(DATE_FMT) + " 🕐 " + time.format(TIME_FMT),
+                TelegramMenuBuilder.buildMeetingsMenu());
+    }
 
-        if (data.startsWith("TASK_VIEW_")) {
-            Long taskId = Long.parseLong(data.split("_")[2]);
-            TaskDto task = taskService.getTask(taskId, telegramId);
-            String taskInfo = formatTask(task);
-            editMessage(telegramId, messageId, taskInfo, TelegramMenuBuilder.buildTaskStatusKeyboard(taskId));
-            return;
-        }
+    private void createDoctorWithCalendarData(Long telegramId, Integer messageId) {
+        Map<String, String> tempData = userTempData.get(telegramId);
+        if (tempData == null) return;
 
-        if (data.startsWith("TASKS_PAGE_")) {
-            int page = Integer.parseInt(data.split("_")[2]);
-            showTasksList(telegramId, messageId, page);
-            return;
-        }
+        LocalDate date = LocalDate.parse(tempData.get("selectedDate"));
+        LocalTime time = LocalTime.parse(tempData.get("selectedTime"));
 
-        if (data.equals("MEETINGS_LIST")) {
-            showMeetingsList(telegramId, messageId, 0);
-            return;
-        }
+        com.taskbot.dto.request.CreateDoctorAppointmentRequest request = com.taskbot.dto.request.CreateDoctorAppointmentRequest.builder()
+                .doctorName(tempData.get("doctorName"))
+                .clinicName(tempData.get("clinic"))
+                .appointmentDate(date)
+                .appointmentTime(time)
+                .build();
 
-        if (data.equals("MEETINGS_CREATE")) {
-            userStates.put(telegramId, "AWAITING_MEETING_TITLE");
-            editMessage(telegramId, messageId, "Enter meeting title:", null);
-            return;
-        }
-
-        if (data.equals("NOTES_LIST")) {
-            showNotesList(telegramId, messageId, 0);
-            return;
-        }
-
-        if (data.equals("NOTES_CREATE")) {
-            userStates.put(telegramId, "AWAITING_NOTE_TITLE");
-            editMessage(telegramId, messageId, "Enter note title:", null);
-            return;
-        }
-
-        if (data.equals("NOTES_SEARCH")) {
-            userStates.put(telegramId, "AWAITING_NOTE_SEARCH");
-            editMessage(telegramId, messageId, "Enter search query:", null);
-            return;
-        }
-
-        if (data.equals("NOTES_CATEGORIES")) {
-            showNoteCategories(telegramId, messageId);
-            return;
-        }
-
-        if (data.equals("DOCTORS_LIST")) {
-            showDoctorAppointments(telegramId, messageId, 0);
-            return;
-        }
-
-        if (data.equals("DOCTORS_CREATE")) {
-            userStates.put(telegramId, "AWAITING_DOCTOR_NAME");
-            editMessage(telegramId, messageId, "Enter doctor name:", null);
-            return;
-        }
-
-        if (data.equals("REMINDERS_LIST")) {
-            showRemindersList(telegramId, messageId);
-            return;
-        }
-
-        if (data.equals("SETTINGS_LANGUAGE")) {
-            userStates.put(telegramId, "AWAITING_LANGUAGE");
-            editMessage(telegramId, messageId, "Enter language code (en, ru, etc.):", null);
-            return;
-        }
-
-        if (data.equals("SETTINGS_TIMEZONE")) {
-            userStates.put(telegramId, "AWAITING_TIMEZONE");
-            editMessage(telegramId, messageId, "Enter timezone (e.g. Europe/Moscow, America/New_York):", null);
-            return;
-        }
-
-        if (data.equals("SETTINGS_NOTIFICATIONS")) {
-            User user = userService.getUserByTelegramId(telegramId);
-            UpdateUserSettingsRequest request = UpdateUserSettingsRequest.builder()
-                    .notificationsEnabled(!user.getNotificationsEnabled())
-                    .build();
-            userService.updateSettings(telegramId, request);
-            showSettings(telegramId, messageId);
-            return;
-        }
-
-        log.warn("Unknown callback data: {}", data);
+        doctorAppointmentService.createAppointment(telegramId, request);
+        userStates.remove(telegramId);
+        userTempData.remove(telegramId);
+        sendMessage(telegramId, "✅ Запись к врачу создана!\n\n📅 " + date.format(DATE_FMT) + " 🕐 " + time.format(TIME_FMT),
+                TelegramMenuBuilder.buildDoctorsMenu());
     }
 
     private void handleStateInput(Long telegramId, String text, String state) {
@@ -284,7 +346,7 @@ public class TelegramBotService {
                 data.put("title", text);
                 userTempData.put(telegramId, data);
                 userStates.put(telegramId, "AWAITING_TASK_DESC");
-                sendMessage(telegramId, "Enter task description (or /skip):", null);
+                sendMessage(telegramId, "📝 Введите описание задачи (или /skip):", null);
             }
             case "AWAITING_TASK_DESC" -> {
                 Map<String, String> data = userTempData.get(telegramId);
@@ -292,95 +354,45 @@ public class TelegramBotService {
                     data.put("description", text);
                 }
                 userStates.put(telegramId, "AWAITING_TASK_PRIORITY");
-                sendMessage(telegramId, "Enter priority (LOW, MEDIUM, HIGH) or /skip:", buildPriorityKeyboard());
+                sendMessage(telegramId, "🎯 Выберите приоритет:", buildPriorityKeyboard());
             }
             case "AWAITING_TASK_PRIORITY" -> {
-                Map<String, String> data = userTempData.get(telegramId);
-                try {
-                    data.put("priority", text.toUpperCase());
-                } catch (Exception e) {
-                    data.put("priority", "MEDIUM");
-                }
-                userStates.put(telegramId, "AWAITING_TASK_DUEDATE");
-                sendMessage(telegramId, "Enter due date (yyyy-MM-dd) or /skip:", null);
-            }
-            case "AWAITING_TASK_DUEDATE" -> {
-                Map<String, String> data = userTempData.get(telegramId);
-                LocalDate dueDate = null;
-                if (!"/skip".equals(text)) {
-                    try {
-                        dueDate = LocalDate.parse(text, DATE_FMT);
-                    } catch (Exception e) {
-                        sendMessage(telegramId, "Invalid date format. Task created without due date.", null);
-                    }
-                }
-                CreateTaskRequest request = CreateTaskRequest.builder()
-                        .title(data.get("title"))
-                        .description(data.get("description"))
-                        .priority(data.containsKey("priority") ?
-                                Task.Priority.valueOf(data.get("priority")) : Task.Priority.MEDIUM)
-                        .dueDate(dueDate)
-                        .build();
-                TaskDto task = taskService.createTask(telegramId, request);
-                userStates.remove(telegramId);
-                userTempData.remove(telegramId);
-                sendMessage(telegramId, "Task created:\n" + formatTask(task), TelegramMenuBuilder.buildTasksMenu());
+                // Handled by callback
             }
             case "AWAITING_MEETING_TITLE" -> {
                 Map<String, String> data = new HashMap<>();
                 data.put("title", text);
                 userTempData.put(telegramId, data);
-                userStates.put(telegramId, "AWAITING_MEETING_DATE");
-                sendMessage(telegramId, "Enter meeting date (yyyy-MM-dd):", null);
-            }
-            case "AWAITING_MEETING_DATE" -> {
-                Map<String, String> data = userTempData.get(telegramId);
-                try {
-                    LocalDate.parse(text, DATE_FMT);
-                    data.put("date", text);
-                    userStates.put(telegramId, "AWAITING_MEETING_TIME");
-                    sendMessage(telegramId, "Enter meeting time (HH:mm):", null);
-                } catch (Exception e) {
-                    sendMessage(telegramId, "Invalid date format. Use yyyy-MM-dd:", null);
-                }
-            }
-            case "AWAITING_MEETING_TIME" -> {
-                Map<String, String> data = userTempData.get(telegramId);
-                try {
-                    LocalTime.parse(text, TIME_FMT);
-                    data.put("time", text);
-                    userStates.put(telegramId, "AWAITING_MEETING_LOCATION");
-                    sendMessage(telegramId, "Enter location (or /skip):", null);
-                } catch (Exception e) {
-                    sendMessage(telegramId, "Invalid time format. Use HH:mm:", null);
-                }
+                userStates.put(telegramId, "AWAITING_MEETING_LOCATION");
+                sendMessage(telegramId, "📍 Введите место встречи (или /skip):", null);
             }
             case "AWAITING_MEETING_LOCATION" -> {
                 Map<String, String> data = userTempData.get(telegramId);
                 if (!"/skip".equals(text)) {
                     data.put("location", text);
                 }
-                userStates.remove(telegramId);
-                userTempData.remove(telegramId);
-                sendMessage(telegramId, "Meeting created!", TelegramMenuBuilder.buildMeetingsMenu());
+                userStates.put(telegramId, "AWAITING_MEETING_DATE_CALENDAR");
+                data.put("nextStep", "MEETING_TIME");
+                editMessage(telegramId, data.get("lastMessageId") != null ?
+                        Integer.parseInt(data.get("lastMessageId")) : null, "📅 Выберите дату:", CalendarBuilder.buildCalendar(LocalDate.now(), "CALENDAR"));
             }
             case "AWAITING_NOTE_TITLE" -> {
                 Map<String, String> data = new HashMap<>();
                 data.put("title", text);
                 userTempData.put(telegramId, data);
                 userStates.put(telegramId, "AWAITING_NOTE_CONTENT");
-                sendMessage(telegramId, "Enter note content:", null);
+                sendMessage(telegramId, "📝 Введите содержимое заметки:", null);
             }
             case "AWAITING_NOTE_CONTENT" -> {
                 Map<String, String> data = userTempData.get(telegramId);
                 data.put("content", text);
                 userStates.put(telegramId, "AWAITING_NOTE_CATEGORY");
-                sendMessage(telegramId, "Enter category (or /skip):", null);
+                sendMessage(telegramId, "📂 Введите категорию (или /skip):", null);
             }
             case "AWAITING_NOTE_CATEGORY" -> {
                 Map<String, String> data = userTempData.get(telegramId);
                 String category = "/skip".equals(text) ? null : text;
-                NoteDto note = noteService.createNote(telegramId,
+                noteService.createNote(telegramId,
                         com.taskbot.dto.request.CreateNoteRequest.builder()
                                 .title(data.get("title"))
                                 .content(data.get("content"))
@@ -388,19 +400,18 @@ public class TelegramBotService {
                                 .build());
                 userStates.remove(telegramId);
                 userTempData.remove(telegramId);
-                sendMessage(telegramId, "Note created! Title: " + note.getTitle(),
-                        TelegramMenuBuilder.buildNotesMenu());
+                sendMessage(telegramId, "✅ Заметка создана!", TelegramMenuBuilder.buildNotesMenu());
             }
             case "AWAITING_NOTE_SEARCH" -> {
                 userStates.remove(telegramId);
-                Page<NoteDto> results = noteService.searchNotes(telegramId, text, 0, 10);
-                StringBuilder sb = new StringBuilder("Search results:\n");
+                Page<com.taskbot.dto.NoteDto> results = noteService.searchNotes(telegramId, text, 0, 10);
+                StringBuilder sb = new StringBuilder("🔍 Результаты поиска:\n\n");
                 results.getContent().forEach(n ->
-                        sb.append("- ").append(n.getTitle())
-                                .append(n.getIsPinned() ? " Pinned" : "")
+                        sb.append("📌 ").append(n.getTitle())
+                                .append(n.getIsPinned() ? " 🔒" : "")
                                 .append("\n"));
                 if (results.getContent().isEmpty()) {
-                    sb.append("No notes found.");
+                    sb.append("📭 Заметки не найдены.");
                 }
                 sendMessage(telegramId, sb.toString(), TelegramMenuBuilder.buildNotesMenu());
             }
@@ -409,38 +420,17 @@ public class TelegramBotService {
                 data.put("doctorName", text);
                 userTempData.put(telegramId, data);
                 userStates.put(telegramId, "AWAITING_DOCTOR_CLINIC");
-                sendMessage(telegramId, "Enter clinic name (or /skip):", null);
+                sendMessage(telegramId, "🏥 Введите название клиники (или /skip):", null);
             }
             case "AWAITING_DOCTOR_CLINIC" -> {
                 Map<String, String> data = userTempData.get(telegramId);
                 if (!"/skip".equals(text)) {
                     data.put("clinic", text);
                 }
-                userStates.put(telegramId, "AWAITING_DOCTOR_DATE");
-                sendMessage(telegramId, "Enter appointment date (yyyy-MM-dd):", null);
-            }
-            case "AWAITING_DOCTOR_DATE" -> {
-                Map<String, String> data = userTempData.get(telegramId);
-                try {
-                    LocalDate.parse(text, DATE_FMT);
-                    data.put("date", text);
-                    userStates.put(telegramId, "AWAITING_DOCTOR_TIME");
-                    sendMessage(telegramId, "Enter appointment time (HH:mm):", null);
-                } catch (Exception e) {
-                    sendMessage(telegramId, "Invalid date format. Use yyyy-MM-dd:", null);
-                }
-            }
-            case "AWAITING_DOCTOR_TIME" -> {
-                Map<String, String> data = userTempData.get(telegramId);
-                try {
-                    LocalTime.parse(text, TIME_FMT);
-                    data.put("time", text);
-                    userStates.remove(telegramId);
-                    userTempData.remove(telegramId);
-                    sendMessage(telegramId, "Doctor appointment created!", TelegramMenuBuilder.buildDoctorsMenu());
-                } catch (Exception e) {
-                    sendMessage(telegramId, "Invalid time format. Use HH:mm:", null);
-                }
+                userStates.put(telegramId, "AWAITING_DOCTOR_DATE_CALENDAR");
+                data.put("nextStep", "DOCTOR_TIME");
+                editMessage(telegramId, data.get("lastMessageId") != null ?
+                        Integer.parseInt(data.get("lastMessageId")) : null, "📅 Выберите дату:", CalendarBuilder.buildCalendar(LocalDate.now(), "CALENDAR"));
             }
             case "AWAITING_LANGUAGE" -> {
                 UpdateUserSettingsRequest request = UpdateUserSettingsRequest.builder()
@@ -448,7 +438,7 @@ public class TelegramBotService {
                         .build();
                 userService.updateSettings(telegramId, request);
                 userStates.remove(telegramId);
-                sendMessage(telegramId, "Language updated!", TelegramMenuBuilder.buildMainMenu());
+                sendMessage(telegramId, "✅ Язык обновлен!", TelegramMenuBuilder.buildMainMenu());
             }
             case "AWAITING_TIMEZONE" -> {
                 UpdateUserSettingsRequest request = UpdateUserSettingsRequest.builder()
@@ -456,34 +446,56 @@ public class TelegramBotService {
                         .build();
                 userService.updateSettings(telegramId, request);
                 userStates.remove(telegramId);
-                sendMessage(telegramId, "Timezone updated!", TelegramMenuBuilder.buildMainMenu());
+                sendMessage(telegramId, "✅ Часовой пояс обновлен!", TelegramMenuBuilder.buildMainMenu());
             }
             default -> {
                 userStates.remove(telegramId);
-                sendMessage(telegramId, "Unknown state. Returning to main menu.",
+                sendMessage(telegramId, "🤔 Неизвестное состояние. Возвращаю в главное меню.",
                         TelegramMenuBuilder.buildMainMenu());
             }
         }
     }
 
+    private void handleTaskStatusChange(Long telegramId, Integer messageId, String data) {
+        String[] parts = data.split("_");
+        Long taskId = Long.parseLong(parts[2]);
+        Task.Status status = Task.Status.valueOf(parts[3]);
+        UpdateTaskRequest request = UpdateTaskRequest.builder().status(status).build();
+        taskService.updateTask(taskId, telegramId, request);
+        showTasksList(telegramId, messageId, 0);
+    }
+
+    private void handleTaskDelete(Long telegramId, Integer messageId, String data) {
+        Long taskId = Long.parseLong(data.split("_")[2]);
+        taskService.deleteTask(taskId, telegramId);
+        editMessage(telegramId, messageId, "✅ Задача удалена.", TelegramMenuBuilder.buildTasksMenu());
+    }
+
+    private void handleTaskView(Long telegramId, Integer messageId, String data) {
+        Long taskId = Long.parseLong(data.split("_")[2]);
+        TaskDto task = taskService.getTask(taskId, telegramId);
+        String taskInfo = formatTask(task);
+        editMessage(telegramId, messageId, taskInfo, TelegramMenuBuilder.buildTaskStatusKeyboard(taskId));
+    }
+
     private void showTasksList(Long telegramId, Integer messageId, int page) {
         Page<TaskDto> tasks = taskService.getUserTasks(telegramId, page, 5);
-        StringBuilder sb = new StringBuilder("Your tasks:\n\n");
+        StringBuilder sb = new StringBuilder("📋 Ваши задачи:\n\n");
         List<TaskDto> content = tasks.getContent();
         if (content.isEmpty()) {
-            sb.append("No tasks yet.");
+            sb.append("📭 Задач пока нет.\n\nНажмите \"➕ Новая задача\" чтобы создать.");
         } else {
             for (TaskDto t : content) {
                 sb.append(formatTaskShort(t)).append("\n");
             }
         }
-        sb.append("\nPage ").append(page + 1).append(" of ").append(tasks.getTotalPages());
+        sb.append("\n📄 Страница ").append(page + 1).append(" из ").append(tasks.getTotalPages());
 
         List<InlineKeyboardRow> rows = new ArrayList<>();
         for (TaskDto t : content) {
             rows.add(new InlineKeyboardRow(
                     InlineKeyboardButton.builder()
-                            .text("View: " + t.getTitle())
+                            .text("👁 " + t.getTitle())
                             .callbackData("TASK_VIEW_" + t.getId())
                             .build()
             ));
@@ -491,13 +503,13 @@ public class TelegramBotService {
         List<InlineKeyboardButton> navButtons = new ArrayList<>();
         if (tasks.hasPrevious()) {
             navButtons.add(InlineKeyboardButton.builder()
-                    .text("Previous")
+                    .text("⬅️ Назад")
                     .callbackData("TASKS_PAGE_" + (page - 1))
                     .build());
         }
         if (tasks.hasNext()) {
             navButtons.add(InlineKeyboardButton.builder()
-                    .text("Next")
+                    .text("Вперед ➡️")
                     .callbackData("TASKS_PAGE_" + (page + 1))
                     .build());
         }
@@ -506,7 +518,7 @@ public class TelegramBotService {
         }
         rows.add(new InlineKeyboardRow(
                 InlineKeyboardButton.builder()
-                        .text("Back")
+                        .text("⬅️ Назад")
                         .callbackData("MENU_TASKS")
                         .build()
         ));
@@ -515,39 +527,23 @@ public class TelegramBotService {
                 InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
-    private void showTaskStatusFilter(Long telegramId, Integer messageId) {
-        InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
-                .keyboard(List.of(
-                        new InlineKeyboardRow(
-                                InlineKeyboardButton.builder()
-                                        .text("TODO")
-                                        .callbackData("TASKS_FILTER_TODO")
-                                        .build(),
-                                InlineKeyboardButton.builder()
-                                        .text("IN PROGRESS")
-                                        .callbackData("TASKS_FILTER_IN_PROGRESS")
-                                        .build(),
-                                InlineKeyboardButton.builder()
-                                        .text("DONE")
-                                        .callbackData("TASKS_FILTER_DONE")
-                                        .build()
-                        ),
-                        new InlineKeyboardRow(
-                                InlineKeyboardButton.builder()
-                                        .text("Back")
-                                        .callbackData("MENU_TASKS")
-                                        .build()
-                        )
-                ))
-                .build();
-        editMessage(telegramId, messageId, "Select status filter:", keyboard);
+    private void showTasksByStatus(Long telegramId, Integer messageId, Task.Status status) {
+        List<TaskDto> tasks = taskService.getTasksByStatus(telegramId, status);
+        StringBuilder sb = new StringBuilder("📋 Задачи со статусом ")
+                .append(getStatusEmoji(status)).append(" ").append(status).append(":\n\n");
+        if (tasks.isEmpty()) {
+            sb.append("📭 Задач с таким статусом нет.");
+        } else {
+            tasks.forEach(t -> sb.append(formatTaskShort(t)).append("\n"));
+        }
+        editMessage(telegramId, messageId, sb.toString(), TelegramMenuBuilder.buildTasksMenu());
     }
 
     private void showOverdueTasks(Long telegramId, Integer messageId) {
         List<TaskDto> overdue = taskService.getOverdueTasks(telegramId);
-        StringBuilder sb = new StringBuilder("Overdue tasks:\n");
+        StringBuilder sb = new StringBuilder("⏰ Просроченные задачи:\n");
         if (overdue.isEmpty()) {
-            sb.append("No overdue tasks!");
+            sb.append("✅ Просроченных задач нет!");
         } else {
             overdue.forEach(t -> sb.append(formatTaskShort(t)).append("\n"));
         }
@@ -555,31 +551,32 @@ public class TelegramBotService {
     }
 
     private void showMeetingsList(Long telegramId, Integer messageId, int page) {
-        Page<MeetingDto> meetings = meetingService.getUserMeetings(telegramId, page, 5);
-        StringBuilder sb = new StringBuilder("Your meetings:\n\n");
+        Page<com.taskbot.dto.MeetingDto> meetings = meetingService.getUserMeetings(telegramId, page, 5);
+        StringBuilder sb = new StringBuilder("📅 Ваши встречи:\n\n");
         if (meetings.getContent().isEmpty()) {
-            sb.append("No meetings yet.");
+            sb.append("📭 Встреч пока нет.");
         } else {
             meetings.getContent().forEach(m -> {
-                sb.append("- ").append(m.getTitle())
-                        .append(" on ").append(m.getMeetingDate())
-                        .append(" at ").append(m.getMeetingTime())
-                        .append("\n");
+                sb.append("📌 ").append(m.getTitle())
+                        .append("\n📅 ").append(m.getMeetingDate().format(DATE_FMT))
+                        .append(" 🕐 ").append(m.getMeetingTime().format(TIME_FMT))
+                        .append("\n📍 ").append(m.getLocation() != null ? m.getLocation() : "Не указано")
+                        .append("\n\n");
             });
         }
         editMessage(telegramId, messageId, sb.toString(), TelegramMenuBuilder.buildMeetingsMenu());
     }
 
     private void showNotesList(Long telegramId, Integer messageId, int page) {
-        Page<NoteDto> notes = noteService.getUserNotes(telegramId, page, 5);
-        StringBuilder sb = new StringBuilder("Your notes:\n\n");
+        Page<com.taskbot.dto.NoteDto> notes = noteService.getUserNotes(telegramId, page, 5);
+        StringBuilder sb = new StringBuilder("📝 Ваши заметки:\n\n");
         if (notes.getContent().isEmpty()) {
-            sb.append("No notes yet.");
+            sb.append("📭 Заметок пока нет.");
         } else {
             notes.getContent().forEach(n ->
-                    sb.append("- ").append(n.getTitle())
-                            .append(n.getIsPinned() ? " Pinned" : "")
-                            .append(" [").append(n.getCategory() != null ? n.getCategory() : "no category").append("]")
+                    sb.append(n.getIsPinned() ? "🔒 " : "📝 ")
+                            .append(n.getTitle())
+                            .append(" [").append(n.getCategory() != null ? n.getCategory() : "без категории").append("]")
                             .append("\n"));
         }
         editMessage(telegramId, messageId, sb.toString(), TelegramMenuBuilder.buildNotesMenu());
@@ -587,11 +584,11 @@ public class TelegramBotService {
 
     private void showNoteCategories(Long telegramId, Integer messageId) {
         List<String> categories = noteService.getCategories(telegramId);
-        StringBuilder sb = new StringBuilder("Your note categories:\n");
+        StringBuilder sb = new StringBuilder("📂 Категории заметок:\n");
         if (categories.isEmpty()) {
-            sb.append("No categories yet.");
+            sb.append("📭 Категорий пока нет.");
         } else {
-            categories.forEach(c -> sb.append("- ").append(c).append("\n"));
+            categories.forEach(c -> sb.append("📌 ").append(c).append("\n"));
         }
         editMessage(telegramId, messageId, sb.toString(), TelegramMenuBuilder.buildNotesMenu());
     }
@@ -599,29 +596,31 @@ public class TelegramBotService {
     private void showDoctorAppointments(Long telegramId, Integer messageId, int page) {
         Page<com.taskbot.dto.DoctorAppointmentDto> appointments =
                 doctorAppointmentService.getUserAppointments(telegramId, page, 5);
-        StringBuilder sb = new StringBuilder("Your doctor appointments:\n\n");
+        StringBuilder sb = new StringBuilder("👨‍⚕️ Ваши записи к врачу:\n\n");
         if (appointments.getContent().isEmpty()) {
-            sb.append("No appointments yet.");
+            sb.append("📭 Записей пока нет.");
         } else {
             appointments.getContent().forEach(a ->
-                    sb.append("- Dr. ").append(a.getDoctorName())
-                            .append(" on ").append(a.getAppointmentDate())
-                            .append(" at ").append(a.getAppointmentTime())
-                            .append("\n"));
+                    sb.append("👨‍⚕️ Др. ").append(a.getDoctorName())
+                            .append("\n🏥 ").append(a.getClinicName() != null ? a.getClinicName() : "Не указано")
+                            .append("\n📅 ").append(a.getAppointmentDate().format(DATE_FMT))
+                            .append(" 🕐 ").append(a.getAppointmentTime().format(TIME_FMT))
+                            .append("\n\n")
+            );
         }
         editMessage(telegramId, messageId, sb.toString(), TelegramMenuBuilder.buildDoctorsMenu());
     }
 
     private void showRemindersList(Long telegramId, Integer messageId) {
         List<com.taskbot.dto.ReminderDto> reminders = reminderService.getUserReminders(telegramId);
-        StringBuilder sb = new StringBuilder("Pending reminders:\n\n");
+        StringBuilder sb = new StringBuilder("🔔 Ваши напоминания:\n\n");
         if (reminders.isEmpty()) {
-            sb.append("No pending reminders.");
+            sb.append("📭 Напоминаний пока нет.");
         } else {
             reminders.forEach(r ->
-                    sb.append("- ").append(r.getMessage())
-                            .append(" at ").append(r.getRemindAt())
-                            .append("\n"));
+                    sb.append("📌 ").append(r.getMessage())
+                            .append("\n⏰ ").append(r.getRemindAt().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")))
+                            .append("\n\n"));
         }
         editMessage(telegramId, messageId, sb.toString(), TelegramMenuBuilder.buildRemindersMenu());
     }
@@ -629,15 +628,15 @@ public class TelegramBotService {
     private void showSettings(Long telegramId, Integer messageId) {
         User user = userService.getUserByTelegramId(telegramId);
         String text = String.format("""
-                Settings:
+                ⚙️ Настройки:
                 
-                Language: %s
-                Timezone: %s
-                Notifications: %s
+                🌐 Язык: %s
+                🕐 Часовой пояс: %s
+                🔔 Уведомления: %s
                 """,
-                user.getLanguageCode(),
+                user.getLanguageCode().toUpperCase(),
                 user.getTimezone(),
-                user.getNotificationsEnabled() ? "ON" : "OFF");
+                user.getNotificationsEnabled() ? "ВКЛ" : "ВЫКЛ");
         editMessage(telegramId, messageId, text,
                 TelegramMenuBuilder.buildSettingsMenu(
                         user.getLanguageCode(),
@@ -647,25 +646,43 @@ public class TelegramBotService {
 
     private String formatTask(TaskDto task) {
         return String.format("""
-                Task: %s
-                Status: %s
-                Priority: %s
-                Due: %s
-                Description: %s
+                📌 %s
+                
+                📊 Статус: %s
+                🎯 Приоритет: %s
+                📅 Дедлайн: %s
+                📝 Описание: %s
                 """,
                 task.getTitle(),
-                task.getStatus(),
-                task.getPriority(),
-                task.getDueDate() != null ? task.getDueDate() : "No deadline",
-                task.getDescription() != null ? task.getDescription() : "No description");
+                getStatusEmoji(task.getStatus()) + " " + task.getStatus(),
+                getPriorityEmoji(task.getPriority()) + " " + task.getPriority(),
+                task.getDueDate() != null ? task.getDueDate().format(DATE_FMT) : "Не установлен",
+                task.getDescription() != null ? task.getDescription() : "Нет описания");
     }
 
     private String formatTaskShort(TaskDto task) {
-        return String.format("- %s [%s] %s%s",
+        return String.format("%s %s [%s] %s%s",
+                getStatusEmoji(task.getStatus()),
                 task.getTitle(),
                 task.getStatus(),
-                task.getPriority(),
-                task.getDueDate() != null ? " Due: " + task.getDueDate() : "");
+                getPriorityEmoji(task.getPriority()),
+                task.getDueDate() != null ? " 📅 " + task.getDueDate().format(DATE_FMT) : "");
+    }
+
+    private String getStatusEmoji(Task.Status status) {
+        return switch (status) {
+            case TODO -> "🟡";
+            case IN_PROGRESS -> "🔵";
+            case DONE -> "✅";
+        };
+    }
+
+    private String getPriorityEmoji(Task.Priority priority) {
+        return switch (priority) {
+            case LOW -> "🟢";
+            case MEDIUM -> "🟡";
+            case HIGH -> "🔴";
+        };
     }
 
     private InlineKeyboardMarkup buildPriorityKeyboard() {
@@ -673,15 +690,15 @@ public class TelegramBotService {
                 .keyboard(List.of(
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("LOW")
+                                        .text("🟢 Низкий")
                                         .callbackData("PRIORITY_LOW")
                                         .build(),
                                 InlineKeyboardButton.builder()
-                                        .text("MEDIUM")
+                                        .text("🟡 Средний")
                                         .callbackData("PRIORITY_MEDIUM")
                                         .build(),
                                 InlineKeyboardButton.builder()
-                                        .text("HIGH")
+                                        .text("🔴 Высокий")
                                         .callbackData("PRIORITY_HIGH")
                                         .build()
                         )

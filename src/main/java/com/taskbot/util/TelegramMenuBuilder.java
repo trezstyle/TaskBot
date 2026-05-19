@@ -1,11 +1,9 @@
 package com.taskbot.util;
 
-import com.taskbot.entity.Task;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class TelegramMenuBuilder {
@@ -17,31 +15,31 @@ public class TelegramMenuBuilder {
                 .keyboard(List.of(
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("Tasks")
+                                        .text("📋 Мои задачи")
                                         .callbackData("MENU_TASKS")
                                         .build(),
                                 InlineKeyboardButton.builder()
-                                        .text("Meetings")
+                                        .text("📅 Встречи")
                                         .callbackData("MENU_MEETINGS")
                                         .build()
                         ),
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("Notes")
-                                        .callbackData("MENU_NOTES")
+                                        .text("👨‍⚕️ Врачи")
+                                        .callbackData("MENU_DOCTORS")
                                         .build(),
                                 InlineKeyboardButton.builder()
-                                        .text("Doctors")
-                                        .callbackData("MENU_DOCTORS")
+                                        .text("📝 Заметки")
+                                        .callbackData("MENU_NOTES")
                                         .build()
                         ),
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("Reminders")
+                                        .text("🔔 Напоминания")
                                         .callbackData("MENU_REMINDERS")
                                         .build(),
                                 InlineKeyboardButton.builder()
-                                        .text("Settings")
+                                        .text("⚙️ Настройки")
                                         .callbackData("MENU_SETTINGS")
                                         .build()
                         )
@@ -54,27 +52,33 @@ public class TelegramMenuBuilder {
                 .keyboard(List.of(
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("My Tasks")
+                                        .text("📋 Все задачи")
                                         .callbackData("TASKS_LIST")
                                         .build(),
                                 InlineKeyboardButton.builder()
-                                        .text("New Task")
+                                        .text("➕ Новая задача")
                                         .callbackData("TASKS_CREATE")
                                         .build()
                         ),
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("By Status")
-                                        .callbackData("TASKS_BY_STATUS")
+                                        .text("🟡 В процессе")
+                                        .callbackData("TASKS_FILTER_IN_PROGRESS")
                                         .build(),
                                 InlineKeyboardButton.builder()
-                                        .text("Overdue")
+                                        .text("✅ Выполненные")
+                                        .callbackData("TASKS_FILTER_DONE")
+                                        .build()
+                        ),
+                        new InlineKeyboardRow(
+                                InlineKeyboardButton.builder()
+                                        .text("⏰ Просроченные")
                                         .callbackData("TASKS_OVERDUE")
                                         .build()
                         ),
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("Back to Menu")
+                                        .text("⬅️ Назад")
                                         .callbackData("MENU_MAIN")
                                         .build()
                         )
@@ -87,25 +91,21 @@ public class TelegramMenuBuilder {
                 .keyboard(List.of(
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("TODO")
-                                        .callbackData("TASK_STATUS_" + taskId + "_TODO")
-                                        .build(),
-                                InlineKeyboardButton.builder()
-                                        .text("IN PROGRESS")
+                                        .text("🟡 В процессе")
                                         .callbackData("TASK_STATUS_" + taskId + "_IN_PROGRESS")
                                         .build(),
                                 InlineKeyboardButton.builder()
-                                        .text("DONE")
+                                        .text("✅ Выполнено")
                                         .callbackData("TASK_STATUS_" + taskId + "_DONE")
                                         .build()
                         ),
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("Delete")
+                                        .text("🗑 Удалить")
                                         .callbackData("TASK_DELETE_" + taskId)
                                         .build(),
                                 InlineKeyboardButton.builder()
-                                        .text("Back")
+                                        .text("⬅️ Назад")
                                         .callbackData("TASKS_LIST")
                                         .build()
                         )
@@ -118,17 +118,17 @@ public class TelegramMenuBuilder {
                 .keyboard(List.of(
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("My Meetings")
+                                        .text("📅 Мои встречи")
                                         .callbackData("MEETINGS_LIST")
                                         .build(),
                                 InlineKeyboardButton.builder()
-                                        .text("New Meeting")
+                                        .text("➕ Новая встреча")
                                         .callbackData("MEETINGS_CREATE")
                                         .build()
                         ),
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("Back to Menu")
+                                        .text("⬅️ Назад")
                                         .callbackData("MENU_MAIN")
                                         .build()
                         )
@@ -141,27 +141,27 @@ public class TelegramMenuBuilder {
                 .keyboard(List.of(
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("My Notes")
+                                        .text("📝 Мои заметки")
                                         .callbackData("NOTES_LIST")
                                         .build(),
                                 InlineKeyboardButton.builder()
-                                        .text("New Note")
+                                        .text("➕ Новая заметка")
                                         .callbackData("NOTES_CREATE")
                                         .build()
                         ),
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("Search")
+                                        .text("🔍 Поиск")
                                         .callbackData("NOTES_SEARCH")
                                         .build(),
                                 InlineKeyboardButton.builder()
-                                        .text("Categories")
+                                        .text("📂 Категории")
                                         .callbackData("NOTES_CATEGORIES")
                                         .build()
                         ),
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("Back to Menu")
+                                        .text("⬅️ Назад")
                                         .callbackData("MENU_MAIN")
                                         .build()
                         )
@@ -174,17 +174,17 @@ public class TelegramMenuBuilder {
                 .keyboard(List.of(
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("My Appointments")
+                                        .text("👨‍⚕️ Мои записи")
                                         .callbackData("DOCTORS_LIST")
                                         .build(),
                                 InlineKeyboardButton.builder()
-                                        .text("New Appointment")
+                                        .text("➕ Новая запись")
                                         .callbackData("DOCTORS_CREATE")
                                         .build()
                         ),
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("Back to Menu")
+                                        .text("⬅️ Назад")
                                         .callbackData("MENU_MAIN")
                                         .build()
                         )
@@ -197,13 +197,13 @@ public class TelegramMenuBuilder {
                 .keyboard(List.of(
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("My Reminders")
+                                        .text("🔔 Мои напоминания")
                                         .callbackData("REMINDERS_LIST")
                                         .build()
                         ),
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("Back to Menu")
+                                        .text("⬅️ Назад")
                                         .callbackData("MENU_MAIN")
                                         .build()
                         )
@@ -216,25 +216,25 @@ public class TelegramMenuBuilder {
                 .keyboard(List.of(
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("Language: " + language)
+                                        .text("🌐 Язык: " + language.toUpperCase())
                                         .callbackData("SETTINGS_LANGUAGE")
                                         .build()
                         ),
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("Timezone: " + timezone)
+                                        .text("🕐 Часовой пояс: " + timezone)
                                         .callbackData("SETTINGS_TIMEZONE")
                                         .build()
                         ),
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("Notifications: " + (notifications ? "ON" : "OFF"))
+                                        .text("🔔 Уведомления: " + (notifications ? "ВКЛ" : "ВЫКЛ"))
                                         .callbackData("SETTINGS_NOTIFICATIONS")
                                         .build()
                         ),
                         new InlineKeyboardRow(
                                 InlineKeyboardButton.builder()
-                                        .text("Back to Menu")
+                                        .text("⬅️ Назад")
                                         .callbackData("MENU_MAIN")
                                         .build()
                         )
