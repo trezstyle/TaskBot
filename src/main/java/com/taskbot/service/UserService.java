@@ -1,7 +1,6 @@
 package com.taskbot.service;
 
 import com.taskbot.dto.UserDto;
-import com.taskbot.dto.request.UpdateUserSettingsRequest;
 import com.taskbot.entity.User;
 import com.taskbot.exception.ResourceNotFoundException;
 import com.taskbot.mapper.UserMapper;
@@ -28,8 +27,8 @@ public class UserService {
                             .username(username != null ? username : String.valueOf(telegramId))
                             .firstName(firstName)
                             .lastName(lastName)
-                            .languageCode("en")
-                            .timezone("UTC")
+                            .languageCode("ru")
+                            .timezone("Europe/Moscow")
                             .notificationsEnabled(true)
                             .build();
                     User saved = userRepository.save(newUser);
@@ -51,11 +50,26 @@ public class UserService {
     }
 
     @Transactional
-    public UserDto updateSettings(Long telegramId, UpdateUserSettingsRequest request) {
+    public void updateLanguage(Long telegramId, String languageCode) {
         User user = getUserByTelegramId(telegramId);
-        userMapper.updateUserFromSettings(request, user);
+        user.setLanguageCode(languageCode);
         userRepository.save(user);
-        log.info("User settings updated: telegramId={}", telegramId);
-        return userMapper.toDto(user);
+        log.info("User language updated: telegramId={}", telegramId);
+    }
+
+    @Transactional
+    public void updateTimezone(Long telegramId, String timezone) {
+        User user = getUserByTelegramId(telegramId);
+        user.setTimezone(timezone);
+        userRepository.save(user);
+        log.info("User timezone updated: telegramId={}", telegramId);
+    }
+
+    @Transactional
+    public void toggleNotifications(Long telegramId) {
+        User user = getUserByTelegramId(telegramId);
+        user.setNotificationsEnabled(!user.getNotificationsEnabled());
+        userRepository.save(user);
+        log.info("User notifications toggled: telegramId={}", telegramId);
     }
 }

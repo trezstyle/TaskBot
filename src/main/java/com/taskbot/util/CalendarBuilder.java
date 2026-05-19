@@ -7,134 +7,159 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.TextStyle;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 
 public class CalendarBuilder {
 
-    private CalendarBuilder() {}
+    private static final String[] DAY_HEADERS = {"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"};
 
-    public static InlineKeyboardMarkup buildCalendar(LocalDate currentDate, String actionPrefix) {
-        YearMonth yearMonth = YearMonth.from(currentDate);
-        LocalDate today = LocalDate.now();
-
+    public static InlineKeyboardMarkup buildCalendar(LocalDate currentDate,
+                                                      Map<LocalDate, Integer> eventCounts,
+                                                      String callbackPrefix) {
         List<InlineKeyboardRow> rows = new ArrayList<>();
 
-        // Header: month/year with navigation
-        String monthName = yearMonth.getMonth().getDisplayName(TextStyle.FULL, new Locale("ru"));
+        YearMonth month = YearMonth.from(currentDate);
+        String header = String.format("📅 %s %d",
+                month.getMonth().getDisplayName(TextStyle.FULL, new Locale("ru")),
+                month.getYear());
+
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder()
-                        .text("◀️")
-                        .callbackData(actionPrefix + "_PREV_MONTH")
-                        .build(),
-                InlineKeyboardButton.builder()
-                        .text(monthName + " " + yearMonth.getYear())
-                        .callbackData("noop")
-                        .build(),
-                InlineKeyboardButton.builder()
-                        .text("▶️")
-                        .callbackData(actionPrefix + "_NEXT_MONTH")
-                        .build()
+                InlineKeyboardButton.builder().text("◀️").callbackData(callbackPrefix + "_PREV").build(),
+                InlineKeyboardButton.builder().text(header).callbackData("NONE").build(),
+                InlineKeyboardButton.builder().text("▶️").callbackData(callbackPrefix + "_NEXT").build()
         ));
 
-        // Weekday headers
-        String[] weekdays = {"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"};
-        InlineKeyboardRow headerRow = new InlineKeyboardRow();
-        for (String day : weekdays) {
-            headerRow.add(InlineKeyboardButton.builder()
-                    .text(day)
-                    .callbackData("noop")
-                    .build());
+        List<InlineKeyboardRow> dayHeaderRows = new ArrayList<>();
+        InlineKeyboardRow dayHeader = new InlineKeyboardRow();
+        for (String day : DAY_HEADERS) {
+            dayHeader.add(InlineKeyboardButton.builder().text(day).callbackData("NONE").build());
         }
-        rows.add(headerRow);
+        rows.add(dayHeader);
 
-        // Days grid
-        LocalDate firstDay = yearMonth.atDay(1);
-        int dayOfWeek = firstDay.getDayOfWeek().getValue(); // 1=Monday
-        int daysInMonth = yearMonth.lengthOfMonth();
+        LocalDate firstDay = month.atDay(1);
+        int dayOfWeek = firstDay.getDayOfWeek().getValue();
+        int daysInMonth = month.lengthOfMonth();
 
         InlineKeyboardRow weekRow = new InlineKeyboardRow();
-
-        // Empty cells before first day
         for (int i = 1; i < dayOfWeek; i++) {
-            weekRow.add(InlineKeyboardButton.builder()
-                    .text(" ")
-                    .callbackData("noop")
-                    .build());
+            weekRow.add(InlineKeyboardButton.builder().text(" ").callbackData("NONE").build());
         }
 
-        // Days
         for (int day = 1; day <= daysInMonth; day++) {
-            LocalDate date = yearMonth.atDay(day);
-            boolean isToday = date.equals(today);
-            boolean isPast = date.isBefore(today);
+            LocalDate date = firstDay.withDayOfMonth(day);
+            int count = eventCounts.getOrDefault(date, 0);
+            String label = count > 0 ? String.valueOf(day) + "•" : String.valueOf(day);
 
-            String text = String.valueOf(day);
-            if (isToday) {
-                text = "🔵" + day;
-            } else if (isPast) {
-                text = "❌" + day;
+            if (date.equals(LocalDate.now())) {
+                label = "【" + label + "】";
             }
 
-            String callbackData = isPast ? "noop" : actionPrefix + "_SELECT_" + date.toString();
-
             weekRow.add(InlineKeyboardButton.builder()
-                    .text(text)
-                    .callbackData(callbackData)
+                    .text(label)
+                    .callbackData(callbackPrefix + "_DAY_" + date.toString())
                     .build());
 
-            if (weekRow.size() == 7) {
+            if (dayOfWeek == 7 || day == daysInMonth) {
                 rows.add(weekRow);
                 weekRow = new InlineKeyboardRow();
+                dayOfWeek = 0;
             }
+            dayOfWeek++;
         }
 
-        // Last row
         if (!weekRow.isEmpty()) {
             rows.add(weekRow);
         }
 
-        // Back button
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder()
-                        .text("⬅️ Назад")
-                        .callbackData("MENU_MAIN")
-                        .build()
+                InlineKeyboardButton.builder().text("➕ Добавить событие").callbackData(callbackPrefix + "_ADD").build()
+        ));
+
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("🏠 Главное меню").callbackData("MENU_MAIN").build()
         ));
 
         return InlineKeyboardMarkup.builder().keyboard(rows).build();
     }
 
-    public static InlineKeyboardMarkup buildTimePicker(String actionPrefix) {
+    public static InlineKeyboardMarkup buildCalendar(LocalDate currentDate, String callbackPrefix) {
+        return buildCalendar(currentDate, Collections.emptyMap(), callbackPrefix);
+    }
+
+    public static InlineKeyboardMarkup buildTimePicker(String callbackPrefix) {
         List<InlineKeyboardRow> rows = new ArrayList<>();
 
-        // Hours
-        InlineKeyboardRow hourRow = new InlineKeyboardRow();
-        for (int h = 8; h <= 20; h++) {
-            hourRow.add(InlineKeyboardButton.builder()
-                    .text(String.format("%02d", h))
-                    .callbackData(actionPrefix + "_HOUR_" + h)
-                    .build());
-        }
-        rows.add(hourRow);
+        InlineKeyboardRow hourHeader = new InlineKeyboardRow();
+        hourHeader.add(InlineKeyboardButton.builder().text("🕐 Час:").callbackData("NONE").build());
+        rows.add(hourHeader);
 
-        // Minutes
+        InlineKeyboardRow hourRow1 = new InlineKeyboardRow();
+        InlineKeyboardRow hourRow2 = new InlineKeyboardRow();
+        for (int h = 0; h < 24; h++) {
+            String label = String.format("%02d", h);
+            InlineKeyboardButton btn = InlineKeyboardButton.builder()
+                    .text(label)
+                    .callbackData(callbackPrefix + "_HOUR_" + label)
+                    .build();
+            if (h < 12) hourRow1.add(btn);
+            else hourRow2.add(btn);
+        }
+        rows.add(hourRow1);
+        rows.add(hourRow2);
+
+        InlineKeyboardRow minuteHeader = new InlineKeyboardRow();
+        minuteHeader.add(InlineKeyboardButton.builder().text("⏱ Минуты:").callbackData("NONE").build());
+        rows.add(minuteHeader);
+
         InlineKeyboardRow minuteRow = new InlineKeyboardRow();
-        for (int m = 0; m < 60; m += 15) {
+        for (int m = 0; m < 60; m += 5) {
             minuteRow.add(InlineKeyboardButton.builder()
-                    .text(String.format(":%02d", m))
-                    .callbackData(actionPrefix + "_MINUTE_" + m)
+                    .text(String.format("%02d", m))
+                    .callbackData(callbackPrefix + "_MINUTE_" + String.format("%02d", m))
                     .build());
         }
         rows.add(minuteRow);
 
-        // Cancel
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder()
-                        .text("❌ Отмена")
-                        .callbackData("MENU_MAIN")
-                        .build()
+                InlineKeyboardButton.builder().text("⬅️ Назад").callbackData("MENU_MAIN").build()
+        ));
+
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
+
+    public static InlineKeyboardMarkup buildColorPicker(String callbackPrefix) {
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("🔵 Синий").callbackData(callbackPrefix + "_BLUE").build(),
+                InlineKeyboardButton.builder().text("🔴 Красный").callbackData(callbackPrefix + "_RED").build(),
+                InlineKeyboardButton.builder().text("🟢 Зелёный").callbackData(callbackPrefix + "_GREEN").build()
+        ));
+
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("🟡 Жёлтый").callbackData(callbackPrefix + "_YELLOW").build(),
+                InlineKeyboardButton.builder().text("🟣 Фиолет").callbackData(callbackPrefix + "_PURPLE").build(),
+                InlineKeyboardButton.builder().text("🟠 Оранж").callbackData(callbackPrefix + "_ORANGE").build()
+        ));
+
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
+
+    public static InlineKeyboardMarkup buildReminderPicker(String callbackPrefix) {
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("Без напоминания").callbackData(callbackPrefix + "_0").build()
+        ));
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("5 мин").callbackData(callbackPrefix + "_5").build(),
+                InlineKeyboardButton.builder().text("15 мин").callbackData(callbackPrefix + "_15").build(),
+                InlineKeyboardButton.builder().text("30 мин").callbackData(callbackPrefix + "_30").build()
+        ));
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("1 час").callbackData(callbackPrefix + "_60").build(),
+                InlineKeyboardButton.builder().text("2 часа").callbackData(callbackPrefix + "_120").build(),
+                InlineKeyboardButton.builder().text("1 день").callbackData(callbackPrefix + "_1440").build()
         ));
 
         return InlineKeyboardMarkup.builder().keyboard(rows).build();

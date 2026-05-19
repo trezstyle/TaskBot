@@ -1,17 +1,11 @@
 package com.taskbot.service;
 
-import com.taskbot.dto.TaskDto;
-import com.taskbot.dto.request.CreateTaskRequest;
-import com.taskbot.dto.request.UpdateTaskRequest;
-import com.taskbot.dto.request.UpdateUserSettingsRequest;
-import com.taskbot.entity.Task;
+import com.taskbot.dto.EventDto;
 import com.taskbot.entity.User;
 import com.taskbot.security.RateLimitingService;
 import com.taskbot.util.CalendarBuilder;
-import com.taskbot.util.TelegramMenuBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
@@ -37,11 +31,7 @@ public class TelegramBotService {
 
     private final TelegramClient telegramClient;
     private final UserService userService;
-    private final TaskService taskService;
-    private final MeetingService meetingService;
-    private final DoctorAppointmentService doctorAppointmentService;
-    private final NoteService noteService;
-    private final ReminderService reminderService;
+    private final EventService eventService;
     private final RateLimitingService rateLimitingService;
 
     private final Map<Long, String> userStates = new ConcurrentHashMap<>();
@@ -90,27 +80,26 @@ public class TelegramBotService {
         if ("/cancel".equals(text)) {
             userStates.remove(telegramId);
             userTempData.remove(telegramId);
-            sendMainMenu(telegramId, "❌ Действие отменено. Возвращаю в главное меню.");
+            sendMainMenu(telegramId, "❌ Действие отменено.");
             return;
         }
 
         if ("/start".equals(text)) {
-            sendMainMenu(telegramId, "👋 Добро пожаловать в TaskBot!\n\nУправляйте задачами, встречами, записями к врачу и заметками в одном месте.");
-        } else if ("/tasks".equals(text)) {
-            sendMessage(telegramId, "📋 Управление задачами:", TelegramMenuBuilder.buildTasksMenu());
+            userStates.remove(telegramId);
+            userTempData.remove(telegramId);
+            showCalendar(telegramId, LocalDate.now());
         } else if ("/help".equals(text)) {
             sendMessage(telegramId, """
                     📖 Доступные команды:
                     
-                    /start - Главное меню
-                    /tasks - Управление задачами
-                    /cancel - Отменить текущее действие
+                    /start - Календарь
+                    /cancel - Отменить действие
                     /help - Эта справка
                     
-                    💡 Используйте кнопки для навигации.
+                    💡 Нажмите на дату чтобы увидеть события.
                     """, null);
         } else {
-            sendMessage(telegramId, "🤔 Неизвестная команда. Используйте /start для главного меню.", null);
+            sendMessage(telegramId, "🤔 Используйте /start для календаря.", null);
         }
     }
 
@@ -130,794 +119,421 @@ public class TelegramBotService {
         switch (data) {
             case "MENU_MAIN" -> {
                 userStates.remove(telegramId);
-                editMessage(telegramId, messageId, "🏠 Главное меню:", TelegramMenuBuilder.buildMainMenu());
-            }
-            case "MENU_TASKS" -> editMessage(telegramId, messageId, "📋 Управление задачами:", TelegramMenuBuilder.buildTasksMenu());
-            case "MENU_MEETINGS" -> editMessage(telegramId, messageId, "📅 Управление встречами:", TelegramMenuBuilder.buildMeetingsMenu());
-            case "MENU_NOTES" -> editMessage(telegramId, messageId, "📝 Управление заметками:", TelegramMenuBuilder.buildNotesMenu());
-            case "MENU_DOCTORS" -> editMessage(telegramId, messageId, "👨‍⚕️ Управление записями:", TelegramMenuBuilder.buildDoctorsMenu());
-            case "MENU_REMINDERS" -> editMessage(telegramId, messageId, "🔔 Напоминания:", TelegramMenuBuilder.buildRemindersMenu());
-            case "MENU_SETTINGS" -> showSettings(telegramId, messageId);
-            case "TASKS_LIST" -> showTasksList(telegramId, messageId, 0);
-            case "TASKS_CREATE" -> {
-                userStates.put(telegramId, "AWAITING_TASK_TITLE");
-                editMessage(telegramId, messageId, "📝 Введите название задачи:", null);
-            }
-            case "TASKS_OVERDUE" -> showOverdueTasks(telegramId, messageId);
-            case "TASKS_FILTER_TODO" -> showTasksByStatus(telegramId, messageId, Task.Status.TODO);
-            case "TASKS_FILTER_IN_PROGRESS" -> showTasksByStatus(telegramId, messageId, Task.Status.IN_PROGRESS);
-            case "TASKS_FILTER_DONE" -> showTasksByStatus(telegramId, messageId, Task.Status.DONE);
-            case "MEETINGS_LIST" -> showMeetingsList(telegramId, messageId, 0);
-            case "MEETINGS_CREATE" -> {
-                userStates.put(telegramId, "AWAITING_MEETING_TITLE");
-                editMessage(telegramId, messageId, "📅 Введите название встречи:", null);
-            }
-            case "NOTES_LIST" -> showNotesList(telegramId, messageId, 0);
-            case "NOTES_CREATE" -> {
-                userStates.put(telegramId, "AWAITING_NOTE_TITLE");
-                editMessage(telegramId, messageId, "📝 Введите название заметки:", null);
-            }
-            case "NOTES_SEARCH" -> {
-                userStates.put(telegramId, "AWAITING_NOTE_SEARCH");
-                editMessage(telegramId, messageId, "🔍 Введите поисковый запрос:", null);
-            }
-            case "NOTES_CATEGORIES" -> showNoteCategories(telegramId, messageId);
-            case "DOCTORS_LIST" -> showDoctorAppointments(telegramId, messageId, 0);
-            case "DOCTORS_CREATE" -> {
-                userStates.put(telegramId, "AWAITING_DOCTOR_NAME");
-                editMessage(telegramId, messageId, "👨‍⚕️ Введите имя врача:", null);
-            }
-            case "REMINDERS_LIST" -> showRemindersList(telegramId, messageId);
-            case "SETTINGS_LANGUAGE" -> {
-                userStates.put(telegramId, "AWAITING_LANGUAGE");
-                editMessage(telegramId, messageId, "🌐 Введите код языка (ru, en, de и т.д.):", null);
-            }
-            case "SETTINGS_TIMEZONE" -> {
-                userStates.put(telegramId, "AWAITING_TIMEZONE");
-                editMessage(telegramId, messageId, "🕐 Введите часовой пояс (например: Europe/Moscow):", null);
-            }
-            case "SETTINGS_NOTIFICATIONS" -> {
-                User user = userService.getUserByTelegramId(telegramId);
-                UpdateUserSettingsRequest request = UpdateUserSettingsRequest.builder()
-                        .notificationsEnabled(!user.getNotificationsEnabled())
-                        .build();
-                userService.updateSettings(telegramId, request);
-                showSettings(telegramId, messageId);
-            }
-            default -> {
-                if (data.startsWith("TASK_STATUS_")) {
-                    handleTaskStatusChange(telegramId, messageId, data);
-                } else if (data.startsWith("TASK_DELETE_")) {
-                    handleTaskDelete(telegramId, messageId, data);
-                } else if (data.startsWith("TASK_VIEW_")) {
-                    handleTaskView(telegramId, messageId, data);
-                } else if (data.startsWith("TASKS_PAGE_")) {
-                    int page = Integer.parseInt(data.split("_")[2]);
-                    showTasksList(telegramId, messageId, page);
-                } else if (data.startsWith("CALENDAR_")) {
-                    handleCalendarAction(telegramId, messageId, data);
-                } else if (data.startsWith("TIME_")) {
-                    handleTimeAction(telegramId, messageId, data);
-                } else if (data.startsWith("PRIORITY_")) {
-                    handlePrioritySelection(telegramId, messageId, data);
-                } else if (data.startsWith("REMINDER_DELETE_")) {
-                    handleReminderDelete(telegramId, messageId, data);
-                } else if (data.startsWith("MEETING_DELETE_")) {
-                    handleMeetingDelete(telegramId, messageId, data);
-                } else if (data.startsWith("DOCTOR_DELETE_")) {
-                    handleDoctorDelete(telegramId, messageId, data);
-                } else if (data.startsWith("NOTE_DELETE_")) {
-                    handleNoteDelete(telegramId, messageId, data);
-                } else if (data.startsWith("NOTE_VIEW_")) {
-                    handleNoteView(telegramId, messageId, data);
-                } else if (data.startsWith("NOTE_PIN_")) {
-                    handleNotePin(telegramId, messageId, data);
-                } else if (data.startsWith("MEETING_UPCOMING")) {
-                    showUpcomingMeetings(telegramId, messageId);
-                } else if (data.startsWith("DOCTOR_UPCOMING")) {
-                    showUpcomingDoctors(telegramId, messageId);
-                }
-            }
-        }
-    }
-
-    private void handleCalendarAction(Long telegramId, Integer messageId, String data) {
-        String[] parts = data.split("_");
-        String action = parts[1];
-        String context = parts.length > 2 ? parts[2] : "";
-
-        Map<String, String> tempData = userTempData.get(telegramId);
-        LocalDate currentDate = tempData != null && tempData.containsKey("calendarDate")
-                ? LocalDate.parse(tempData.get("calendarDate"))
-                : LocalDate.now();
-
-        switch (action) {
-            case "PREV_MONTH" -> {
-                currentDate = currentDate.minusMonths(1);
-                if (tempData != null) tempData.put("calendarDate", currentDate.toString());
-                editMessage(telegramId, messageId, "📅 Выберите дату:", CalendarBuilder.buildCalendar(currentDate, "CALENDAR"));
-            }
-            case "NEXT_MONTH" -> {
-                currentDate = currentDate.plusMonths(1);
-                if (tempData != null) tempData.put("calendarDate", currentDate.toString());
-                editMessage(telegramId, messageId, "📅 Выберите дату:", CalendarBuilder.buildCalendar(currentDate, "CALENDAR"));
-            }
-            case "SELECT" -> {
-                LocalDate selectedDate = LocalDate.parse(parts[3]);
-                if (tempData != null) {
-                    tempData.put("selectedDate", selectedDate.toString());
-                    String step = tempData.get("nextStep");
-                    if ("MEETING_TIME".equals(step)) {
-                        tempData.put("calendarMode", "MEETING");
-                        editMessage(telegramId, messageId, "🕐 Выберите время:", CalendarBuilder.buildTimePicker("TIME"));
-                    } else if ("DOCTOR_TIME".equals(step)) {
-                        tempData.put("calendarMode", "DOCTOR");
-                        editMessage(telegramId, messageId, "🕐 Выберите время:", CalendarBuilder.buildTimePicker("TIME"));
-                    } else if ("TASK_DUE".equals(step)) {
-                        createTaskWithCalendarDate(telegramId, messageId, selectedDate);
-                    }
-                }
-            }
-        }
-    }
-
-    private void handleTimeAction(Long telegramId, Integer messageId, String data) {
-        String[] parts = data.split("_");
-        String action = parts[1];
-        String value = parts.length > 2 ? parts[2] : "";
-
-        Map<String, String> tempData = userTempData.get(telegramId);
-        if (tempData == null) return;
-
-        switch (action) {
-            case "HOUR" -> {
-                tempData.put("selectedHour", value);
-                editMessage(telegramId, messageId, "🕐 Выберите минуты:", CalendarBuilder.buildTimePicker("TIME"));
-            }
-            case "MINUTE" -> {
-                String hour = tempData.get("selectedHour");
-                String minute = value;
-                LocalTime time = LocalTime.of(Integer.parseInt(hour), Integer.parseInt(minute));
-                tempData.put("selectedTime", time.toString());
-
-                String mode = tempData.get("calendarMode");
-                if ("MEETING".equals(mode)) {
-                    createMeetingWithCalendarData(telegramId, messageId);
-                } else if ("DOCTOR".equals(mode)) {
-                    createDoctorWithCalendarData(telegramId, messageId);
-                }
-            }
-        }
-    }
-
-    private void handlePrioritySelection(Long telegramId, Integer messageId, String data) {
-        String priority = data.split("_")[1];
-        Map<String, String> tempData = userTempData.get(telegramId);
-        if (tempData != null) {
-            tempData.put("priority", priority);
-            showCalendarForTaskDueDate(telegramId, messageId);
-        }
-    }
-
-    private void showCalendarForTaskDueDate(Long telegramId, Integer messageId) {
-        Map<String, String> tempData = userTempData.get(telegramId);
-        if (tempData == null) return;
-
-        tempData.put("nextStep", "TASK_DUE");
-        editMessage(telegramId, messageId, "📅 Выберите дедлайн:", CalendarBuilder.buildCalendar(LocalDate.now(), "CALENDAR"));
-    }
-
-    private void createTaskWithCalendarDate(Long telegramId, Integer messageId, LocalDate dueDate) {
-        Map<String, String> tempData = userTempData.get(telegramId);
-        if (tempData == null) return;
-
-        CreateTaskRequest request = CreateTaskRequest.builder()
-                .title(tempData.get("title"))
-                .description(tempData.get("description"))
-                .priority(tempData.containsKey("priority") ?
-                        Task.Priority.valueOf(tempData.get("priority")) : Task.Priority.MEDIUM)
-                .dueDate(dueDate)
-                .build();
-
-        TaskDto task = taskService.createTask(telegramId, request);
-        userStates.remove(telegramId);
-        userTempData.remove(telegramId);
-        sendMessage(telegramId, "✅ Задача создана!\n\n" + formatTask(task), TelegramMenuBuilder.buildTasksMenu());
-    }
-
-    private void createMeetingWithCalendarData(Long telegramId, Integer messageId) {
-        Map<String, String> tempData = userTempData.get(telegramId);
-        if (tempData == null) return;
-
-        LocalDate date = LocalDate.parse(tempData.get("selectedDate"));
-        LocalTime time = LocalTime.parse(tempData.get("selectedTime"));
-
-        // Create meeting
-        com.taskbot.dto.request.CreateMeetingRequest request = com.taskbot.dto.request.CreateMeetingRequest.builder()
-                .title(tempData.get("title"))
-                .meetingDate(date)
-                .meetingTime(time)
-                .location(tempData.get("location"))
-                .build();
-
-        meetingService.createMeeting(telegramId, request);
-        userStates.remove(telegramId);
-        userTempData.remove(telegramId);
-        sendMessage(telegramId, "✅ Встреча создана!\n\n📅 " + date.format(DATE_FMT) + " 🕐 " + time.format(TIME_FMT),
-                TelegramMenuBuilder.buildMeetingsMenu());
-    }
-
-    private void createDoctorWithCalendarData(Long telegramId, Integer messageId) {
-        Map<String, String> tempData = userTempData.get(telegramId);
-        if (tempData == null) return;
-
-        LocalDate date = LocalDate.parse(tempData.get("selectedDate"));
-        LocalTime time = LocalTime.parse(tempData.get("selectedTime"));
-
-        com.taskbot.dto.request.CreateDoctorAppointmentRequest request = com.taskbot.dto.request.CreateDoctorAppointmentRequest.builder()
-                .doctorName(tempData.get("doctorName"))
-                .clinicName(tempData.get("clinic"))
-                .appointmentDate(date)
-                .appointmentTime(time)
-                .build();
-
-        doctorAppointmentService.createAppointment(telegramId, request);
-        userStates.remove(telegramId);
-        userTempData.remove(telegramId);
-        sendMessage(telegramId, "✅ Запись к врачу создана!\n\n📅 " + date.format(DATE_FMT) + " 🕐 " + time.format(TIME_FMT),
-                TelegramMenuBuilder.buildDoctorsMenu());
-    }
-
-    private void handleStateInput(Long telegramId, String text, String state) {
-        switch (state) {
-            case "AWAITING_TASK_TITLE" -> {
-                Map<String, String> data = new HashMap<>();
-                data.put("title", text);
-                userTempData.put(telegramId, data);
-                userStates.put(telegramId, "AWAITING_TASK_DESC");
-                sendMessage(telegramId, "📝 Введите описание задачи (или /skip):", null);
-            }
-            case "AWAITING_TASK_DESC" -> {
-                Map<String, String> data = userTempData.get(telegramId);
-                if (!"/skip".equals(text)) {
-                    data.put("description", text);
-                }
-                userStates.put(telegramId, "AWAITING_TASK_PRIORITY");
-                sendMessage(telegramId, "🎯 Выберите приоритет:", buildPriorityKeyboard());
-            }
-            case "AWAITING_TASK_PRIORITY" -> {
-                sendMessage(telegramId, "⚠️ Нажмите одну из кнопок выше для выбора приоритета:", buildPriorityKeyboard());
-            }
-            case "AWAITING_MEETING_TITLE" -> {
-                Map<String, String> data = new HashMap<>();
-                data.put("title", text);
-                userTempData.put(telegramId, data);
-                userStates.put(telegramId, "AWAITING_MEETING_LOCATION");
-                sendMessage(telegramId, "📍 Введите место встречи (или /skip):", null);
-            }
-            case "AWAITING_MEETING_LOCATION" -> {
-                Map<String, String> data = userTempData.get(telegramId);
-                if (!"/skip".equals(text)) {
-                    data.put("location", text);
-                }
-                userStates.put(telegramId, "AWAITING_MEETING_DATE_CALENDAR");
-                data.put("nextStep", "MEETING_TIME");
-                sendMessage(telegramId, "📅 Выберите дату:", CalendarBuilder.buildCalendar(LocalDate.now(), "CALENDAR"));
-            }
-            case "AWAITING_NOTE_TITLE" -> {
-                Map<String, String> data = new HashMap<>();
-                data.put("title", text);
-                userTempData.put(telegramId, data);
-                userStates.put(telegramId, "AWAITING_NOTE_CONTENT");
-                sendMessage(telegramId, "📝 Введите содержимое заметки:", null);
-            }
-            case "AWAITING_NOTE_CONTENT" -> {
-                Map<String, String> data = userTempData.get(telegramId);
-                data.put("content", text);
-                userStates.put(telegramId, "AWAITING_NOTE_CATEGORY");
-                sendMessage(telegramId, "📂 Введите категорию (или /skip):", null);
-            }
-            case "AWAITING_NOTE_CATEGORY" -> {
-                Map<String, String> data = userTempData.get(telegramId);
-                String category = "/skip".equals(text) ? null : text;
-                noteService.createNote(telegramId,
-                        com.taskbot.dto.request.CreateNoteRequest.builder()
-                                .title(data.get("title"))
-                                .content(data.get("content"))
-                                .category(category)
-                                .build());
-                userStates.remove(telegramId);
                 userTempData.remove(telegramId);
-                sendMessage(telegramId, "✅ Заметка создана!", TelegramMenuBuilder.buildNotesMenu());
+                showCalendar(telegramId, LocalDate.now());
             }
-            case "AWAITING_NOTE_SEARCH" -> {
-                userStates.remove(telegramId);
-                Page<com.taskbot.dto.NoteDto> results = noteService.searchNotes(telegramId, text, 0, 10);
-                StringBuilder sb = new StringBuilder("🔍 Результаты поиска:\n\n");
-                results.getContent().forEach(n ->
-                        sb.append("📌 ").append(n.getTitle())
-                                .append(n.getIsPinned() ? " 🔒" : "")
-                                .append("\n"));
-                if (results.getContent().isEmpty()) {
-                    sb.append("📭 Заметки не найдены.");
-                }
-                sendMessage(telegramId, sb.toString(), TelegramMenuBuilder.buildNotesMenu());
-            }
-            case "AWAITING_DOCTOR_NAME" -> {
-                Map<String, String> data = new HashMap<>();
-                data.put("doctorName", text);
-                userTempData.put(telegramId, data);
-                userStates.put(telegramId, "AWAITING_DOCTOR_CLINIC");
-                sendMessage(telegramId, "🏥 Введите название клиники (или /skip):", null);
-            }
-            case "AWAITING_DOCTOR_CLINIC" -> {
-                Map<String, String> data = userTempData.get(telegramId);
-                if (!"/skip".equals(text)) {
-                    data.put("clinic", text);
-                }
-                userStates.put(telegramId, "AWAITING_DOCTOR_DATE_CALENDAR");
-                data.put("nextStep", "DOCTOR_TIME");
-                sendMessage(telegramId, "📅 Выберите дату:", CalendarBuilder.buildCalendar(LocalDate.now(), "CALENDAR"));
-            }
-            case "AWAITING_LANGUAGE" -> {
-                UpdateUserSettingsRequest request = UpdateUserSettingsRequest.builder()
-                        .languageCode(text)
-                        .build();
-                userService.updateSettings(telegramId, request);
-                userStates.remove(telegramId);
-                sendMessage(telegramId, "✅ Язык обновлен!", TelegramMenuBuilder.buildMainMenu());
-            }
-            case "AWAITING_TIMEZONE" -> {
-                UpdateUserSettingsRequest request = UpdateUserSettingsRequest.builder()
-                        .timezone(text)
-                        .build();
-                userService.updateSettings(telegramId, request);
-                userStates.remove(telegramId);
-                sendMessage(telegramId, "✅ Часовой пояс обновлен!", TelegramMenuBuilder.buildMainMenu());
-            }
+            case "CAL_PREV", "ADD_PREV" -> showCalendarPrevMonth(telegramId, messageId, data.startsWith("ADD"));
+            case "CAL_NEXT", "ADD_NEXT" -> showCalendarNextMonth(telegramId, messageId, data.startsWith("ADD"));
+            case "CAL_ADD" -> startCreateEvent(telegramId, messageId);
             default -> {
-                userStates.remove(telegramId);
-                sendMessage(telegramId, "🤔 Неизвестное состояние. Возвращаю в главное меню.",
-                        TelegramMenuBuilder.buildMainMenu());
+                if (data.startsWith("CAL_DAY_")) {
+                    handleDaySelection(telegramId, messageId, data);
+                } else if (data.startsWith("ADD_DAY_")) {
+                    handleAddDaySelection(telegramId, messageId, data);
+                } else if (data.startsWith("EVT_VIEW_")) {
+                    handleEventView(telegramId, messageId, data);
+                } else if (data.startsWith("EVT_DELETE_")) {
+                    handleEventDelete(telegramId, messageId, data);
+                } else if (data.startsWith("EVT_BACK_")) {
+                    handleBackToDate(telegramId, messageId, data);
+                } else if (data.startsWith("CREATE_TIME_")) {
+                    handleTimeSelection(telegramId, messageId, data);
+                } else if (data.startsWith("CREATE_COLOR_")) {
+                    handleColorSelection(telegramId, messageId, data);
+                } else if (data.startsWith("CREATE_REM_")) {
+                    handleReminderSelection(telegramId, messageId, data);
+                } else if ("CREATE_SKIP_TIME".equals(data)) {
+                    handleSkipTime(telegramId, messageId);
+                } else if ("CREATE_BACK_DATE".equals(data)) {
+                    handleBackToDateSelection(telegramId, messageId);
+                }
             }
         }
     }
 
-    private void handleTaskStatusChange(Long telegramId, Integer messageId, String data) {
-        String[] parts = data.split("_");
-        Long taskId = Long.parseLong(parts[2]);
-        Task.Status status = Task.Status.valueOf(parts[3]);
-        UpdateTaskRequest request = UpdateTaskRequest.builder().status(status).build();
-        taskService.updateTask(taskId, telegramId, request);
-        showTasksList(telegramId, messageId, 0);
+    private void showCalendar(Long telegramId, LocalDate date) {
+        showCalendar(telegramId, date, false);
     }
 
-    private void handleTaskDelete(Long telegramId, Integer messageId, String data) {
-        Long taskId = Long.parseLong(data.split("_")[2]);
-        taskService.deleteTask(taskId, telegramId);
-        editMessage(telegramId, messageId, "✅ Задача удалена.", TelegramMenuBuilder.buildTasksMenu());
-    }
-
-    private void handleTaskView(Long telegramId, Integer messageId, String data) {
-        Long taskId = Long.parseLong(data.split("_")[2]);
-        TaskDto task = taskService.getTask(taskId, telegramId);
-        String taskInfo = formatTask(task);
-        editMessage(telegramId, messageId, taskInfo, TelegramMenuBuilder.buildTaskStatusKeyboard(taskId));
-    }
-
-    private void showTasksList(Long telegramId, Integer messageId, int page) {
-        Page<TaskDto> tasks = taskService.getUserTasks(telegramId, page, 5);
-        StringBuilder sb = new StringBuilder("📋 Ваши задачи:\n\n");
-        List<TaskDto> content = tasks.getContent();
-        if (content.isEmpty()) {
-            sb.append("📭 Задач пока нет.\n\nНажмите \"➕ Новая задача\" чтобы создать.");
-        } else {
-            for (TaskDto t : content) {
-                sb.append(formatTaskShort(t)).append("\n");
-            }
+    private void showCalendar(Long telegramId, LocalDate date, boolean addMode) {
+        Map<LocalDate, Integer> eventCounts = new HashMap<>();
+        LocalDate start = date.withDayOfMonth(1);
+        LocalDate end = date.withDayOfMonth(date.lengthOfMonth());
+        List<EventDto> events = eventService.getEventsInRange(telegramId, start, end);
+        for (EventDto e : events) {
+            eventCounts.merge(e.getEventDate(), 1, Integer::sum);
         }
-        sb.append("\n📄 Страница ").append(page + 1).append(" из ").append(tasks.getTotalPages());
+
+        String prefix = addMode ? "ADD" : "CAL";
+        String monthName = date.getMonth().getDisplayName(java.time.format.TextStyle.FULL, new Locale("ru"));
+        String text = String.format("📅 %s %d\n\nНажмите на дату для просмотра событий.\n【】 - сегодня\n• - есть события",
+                monthName, date.getYear());
+
+        sendMessage(telegramId, text, CalendarBuilder.buildCalendar(date, eventCounts, prefix));
+    }
+
+    private void showCalendarPrevMonth(Long telegramId, Integer messageId, boolean addMode) {
+        Map<String, String> temp = userTempData.computeIfAbsent(telegramId, k -> new HashMap<>());
+        LocalDate current = temp.containsKey("calendarDate")
+                ? LocalDate.parse(temp.get("calendarDate"))
+                : LocalDate.now();
+        current = current.minusMonths(1);
+        temp.put("calendarDate", current.toString());
+        showCalendar(telegramId, current, addMode);
+    }
+
+    private void showCalendarNextMonth(Long telegramId, Integer messageId, boolean addMode) {
+        Map<String, String> temp = userTempData.computeIfAbsent(telegramId, k -> new HashMap<>());
+        LocalDate current = temp.containsKey("calendarDate")
+                ? LocalDate.parse(temp.get("calendarDate"))
+                : LocalDate.now();
+        current = current.plusMonths(1);
+        temp.put("calendarDate", current.toString());
+        showCalendar(telegramId, current, addMode);
+    }
+
+    private void handleDaySelection(Long telegramId, Integer messageId, String data) {
+        LocalDate date = LocalDate.parse(data.split("_")[2]);
+        List<EventDto> events = eventService.getEventsByDate(telegramId, date);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("📅 ").append(date.format(DATE_FMT)).append("\n\n");
 
         List<InlineKeyboardRow> rows = new ArrayList<>();
-        for (TaskDto t : content) {
-            rows.add(new InlineKeyboardRow(
-                    InlineKeyboardButton.builder()
-                            .text("👁 " + t.getTitle())
-                            .callbackData("TASK_VIEW_" + t.getId())
-                            .build()
-            ));
-        }
-        List<InlineKeyboardButton> navButtons = new ArrayList<>();
-        if (tasks.hasPrevious()) {
-            navButtons.add(InlineKeyboardButton.builder()
-                    .text("⬅️ Назад")
-                    .callbackData("TASKS_PAGE_" + (page - 1))
-                    .build());
-        }
-        if (tasks.hasNext()) {
-            navButtons.add(InlineKeyboardButton.builder()
-                    .text("Вперед ➡️")
-                    .callbackData("TASKS_PAGE_" + (page + 1))
-                    .build());
-        }
-        if (!navButtons.isEmpty()) {
-            rows.add(new InlineKeyboardRow(navButtons));
-        }
-        rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder()
-                        .text("⬅️ Назад")
-                        .callbackData("MENU_TASKS")
-                        .build()
-        ));
 
-        editMessage(telegramId, messageId, sb.toString(),
-                InlineKeyboardMarkup.builder().keyboard(rows).build());
-    }
-
-    private void showTasksByStatus(Long telegramId, Integer messageId, Task.Status status) {
-        List<TaskDto> tasks = taskService.getTasksByStatus(telegramId, status);
-        StringBuilder sb = new StringBuilder("📋 Задачи со статусом ")
-                .append(getStatusEmoji(status)).append(" ").append(status).append(":\n\n");
-        if (tasks.isEmpty()) {
-            sb.append("📭 Задач с таким статусом нет.");
+        if (events.isEmpty()) {
+            sb.append("📭 Нет событий на этот день.");
         } else {
-            tasks.forEach(t -> sb.append(formatTaskShort(t)).append("\n"));
-        }
-        editMessage(telegramId, messageId, sb.toString(), TelegramMenuBuilder.buildTasksMenu());
-    }
-
-    private void showOverdueTasks(Long telegramId, Integer messageId) {
-        List<TaskDto> overdue = taskService.getOverdueTasks(telegramId);
-        StringBuilder sb = new StringBuilder("⏰ Просроченные задачи:\n");
-        if (overdue.isEmpty()) {
-            sb.append("✅ Просроченных задач нет!");
-        } else {
-            overdue.forEach(t -> sb.append(formatTaskShort(t)).append("\n"));
-        }
-        editMessage(telegramId, messageId, sb.toString(), TelegramMenuBuilder.buildTasksMenu());
-    }
-
-    private void showMeetingsList(Long telegramId, Integer messageId, int page) {
-        Page<com.taskbot.dto.MeetingDto> meetings = meetingService.getUserMeetings(telegramId, page, 5);
-        StringBuilder sb = new StringBuilder("📅 Ваши встречи:\n\n");
-        List<InlineKeyboardRow> rows = new ArrayList<>();
-        if (meetings.getContent().isEmpty()) {
-            sb.append("📭 Встреч пока нет.");
-        } else {
-            for (com.taskbot.dto.MeetingDto m : meetings.getContent()) {
-                sb.append("📌 ").append(m.getTitle())
-                        .append("\n📅 ").append(m.getMeetingDate().format(DATE_FMT))
-                        .append(" 🕐 ").append(m.getMeetingTime().format(TIME_FMT))
-                        .append("\n📍 ").append(m.getLocation() != null ? m.getLocation() : "Не указано")
-                        .append("\n\n");
-                rows.add(new InlineKeyboardRow(
-                        InlineKeyboardButton.builder()
-                                .text("🗑 Удалить")
-                                .callbackData("MEETING_DELETE_" + m.getId())
-                                .build()
-                ));
-            }
-        }
-        rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder()
-                        .text("⬅️ Назад")
-                        .callbackData("MENU_MEETINGS")
-                        .build()
-        ));
-        editMessage(telegramId, messageId, sb.toString(),
-                InlineKeyboardMarkup.builder().keyboard(rows).build());
-    }
-
-    private void showNotesList(Long telegramId, Integer messageId, int page) {
-        Page<com.taskbot.dto.NoteDto> notes = noteService.getUserNotes(telegramId, page, 5);
-        StringBuilder sb = new StringBuilder("📝 Ваши заметки:\n\n");
-        List<InlineKeyboardRow> rows = new ArrayList<>();
-        if (notes.getContent().isEmpty()) {
-            sb.append("📭 Заметок пока нет.");
-        } else {
-            for (com.taskbot.dto.NoteDto n : notes.getContent()) {
-                sb.append(n.getIsPinned() ? "🔒 " : "📝 ")
-                        .append(n.getTitle())
-                        .append(" [").append(n.getCategory() != null ? n.getCategory() : "без категории").append("]")
-                        .append("\n");
+            for (EventDto e : events) {
+                String timeStr = e.getEventTime() != null ? " 🕐 " + e.getEventTime().format(TIME_FMT) : "";
+                sb.append(getColorEmoji(e.getColor())).append(" ").append(e.getTitle()).append(timeStr).append("\n");
                 rows.add(new InlineKeyboardRow(
                         InlineKeyboardButton.builder()
                                 .text("👁 Просмотр")
-                                .callbackData("NOTE_VIEW_" + n.getId())
+                                .callbackData("EVT_VIEW_" + e.getId())
                                 .build()
                 ));
             }
         }
+
         rows.add(new InlineKeyboardRow(
                 InlineKeyboardButton.builder()
-                        .text("⬅️ Назад")
-                        .callbackData("MENU_NOTES")
+                        .text("➕ Добавить событие")
+                        .callbackData("CAL_ADD")
                         .build()
         ));
-        editMessage(telegramId, messageId, sb.toString(),
-                InlineKeyboardMarkup.builder().keyboard(rows).build());
-    }
 
-    private void showNoteCategories(Long telegramId, Integer messageId) {
-        List<String> categories = noteService.getCategories(telegramId);
-        StringBuilder sb = new StringBuilder("📂 Категории заметок:\n");
-        if (categories.isEmpty()) {
-            sb.append("📭 Категорий пока нет.");
-        } else {
-            categories.forEach(c -> sb.append("📌 ").append(c).append("\n"));
-        }
-        editMessage(telegramId, messageId, sb.toString(), TelegramMenuBuilder.buildNotesMenu());
-    }
+        Map<String, String> temp = userTempData.computeIfAbsent(telegramId, k -> new HashMap<>());
+        temp.put("selectedDate", date.toString());
 
-    private void showDoctorAppointments(Long telegramId, Integer messageId, int page) {
-        Page<com.taskbot.dto.DoctorAppointmentDto> appointments =
-                doctorAppointmentService.getUserAppointments(telegramId, page, 5);
-        StringBuilder sb = new StringBuilder("👨‍⚕️ Ваши записи к врачу:\n\n");
-        List<InlineKeyboardRow> rows = new ArrayList<>();
-        if (appointments.getContent().isEmpty()) {
-            sb.append("📭 Записей пока нет.");
-        } else {
-            for (com.taskbot.dto.DoctorAppointmentDto a : appointments.getContent()) {
-                sb.append("👨‍⚕️ Др. ").append(a.getDoctorName())
-                        .append("\n🏥 ").append(a.getClinicName() != null ? a.getClinicName() : "Не указано")
-                        .append("\n📅 ").append(a.getAppointmentDate().format(DATE_FMT))
-                        .append(" 🕐 ").append(a.getAppointmentTime().format(TIME_FMT))
-                        .append("\n\n");
-                rows.add(new InlineKeyboardRow(
-                        InlineKeyboardButton.builder()
-                                .text("🗑 Удалить")
-                                .callbackData("DOCTOR_DELETE_" + a.getId())
-                                .build()
-                ));
-            }
-        }
         rows.add(new InlineKeyboardRow(
                 InlineKeyboardButton.builder()
-                        .text("⬅️ Назад")
-                        .callbackData("MENU_DOCTORS")
-                        .build()
-        ));
-        editMessage(telegramId, messageId, sb.toString(),
-                InlineKeyboardMarkup.builder().keyboard(rows).build());
-    }
-
-    private void showRemindersList(Long telegramId, Integer messageId) {
-        List<com.taskbot.dto.ReminderDto> reminders = reminderService.getUserReminders(telegramId);
-        StringBuilder sb = new StringBuilder("🔔 Ваши напоминания:\n\n");
-        List<InlineKeyboardRow> rows = new ArrayList<>();
-        if (reminders.isEmpty()) {
-            sb.append("📭 Напоминаний пока нет.");
-        } else {
-            for (com.taskbot.dto.ReminderDto r : reminders) {
-                sb.append("📌 ").append(r.getMessage())
-                        .append("\n⏰ ").append(r.getRemindAt().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")))
-                        .append("\n\n");
-                rows.add(new InlineKeyboardRow(
-                        InlineKeyboardButton.builder()
-                                .text("🗑 Удалить")
-                                .callbackData("REMINDER_DELETE_" + r.getId())
-                                .build()
-                ));
-            }
-        }
-        rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder()
-                        .text("⬅️ Назад")
+                        .text("📅 Календарь")
                         .callbackData("MENU_MAIN")
                         .build()
         ));
+
         editMessage(telegramId, messageId, sb.toString(),
                 InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
-    private void handleReminderDelete(Long telegramId, Integer messageId, String data) {
-        Long reminderId = Long.parseLong(data.split("_")[2]);
-        reminderService.deleteReminder(reminderId, telegramId);
-        showRemindersList(telegramId, messageId);
+    private void handleAddDaySelection(Long telegramId, Integer messageId, String data) {
+        LocalDate date = LocalDate.parse(data.split("_")[2]);
+        Map<String, String> temp = userTempData.computeIfAbsent(telegramId, k -> new HashMap<>());
+        temp.put("selectedDate", date.toString());
+        showTimePicker(telegramId, messageId);
     }
 
-    private void handleMeetingDelete(Long telegramId, Integer messageId, String data) {
-        Long meetingId = Long.parseLong(data.split("_")[2]);
-        meetingService.deleteMeeting(meetingId, telegramId);
-        editMessage(telegramId, messageId, "✅ Встреча удалена.", TelegramMenuBuilder.buildMeetingsMenu());
-    }
+    private void showTimePicker(Long telegramId, Integer messageId) {
+        Map<String, String> temp = userTempData.get(telegramId);
+        LocalDate date = temp != null ? LocalDate.parse(temp.get("selectedDate")) : LocalDate.now();
 
-    private void handleDoctorDelete(Long telegramId, Integer messageId, String data) {
-        Long appointmentId = Long.parseLong(data.split("_")[2]);
-        doctorAppointmentService.deleteAppointment(appointmentId, telegramId);
-        editMessage(telegramId, messageId, "✅ Запись к врачу удалена.", TelegramMenuBuilder.buildDoctorsMenu());
-    }
-
-    private void handleNoteDelete(Long telegramId, Integer messageId, String data) {
-        Long noteId = Long.parseLong(data.split("_")[2]);
-        noteService.deleteNote(noteId, telegramId);
-        showNotesList(telegramId, messageId, 0);
-    }
-
-    private void handleNoteView(Long telegramId, Integer messageId, String data) {
-        Long noteId = Long.parseLong(data.split("_")[2]);
-        String content = noteService.getDecryptedContent(noteId, telegramId);
-        com.taskbot.dto.NoteDto note = noteService.getUserNotes(telegramId, 0, 100).getContent().stream()
-                .filter(n -> n.getId().equals(noteId)).findFirst().orElse(null);
-        if (note != null) {
-            String text = String.format("📝 %s\n📂 %s\n🏷 %s\n\n%s",
-                    note.getTitle(),
-                    note.getCategory() != null ? note.getCategory() : "без категории",
-                    note.getTags() != null ? note.getTags() : "без тегов",
-                    content);
-            List<InlineKeyboardRow> rows = new ArrayList<>();
-            rows.add(new InlineKeyboardRow(
-                    InlineKeyboardButton.builder()
-                            .text(note.getIsPinned() ? "📌 Открепить" : "📌 Закрепить")
-                            .callbackData("NOTE_PIN_" + noteId)
-                            .build(),
-                    InlineKeyboardButton.builder()
-                            .text("🗑 Удалить")
-                            .callbackData("NOTE_DELETE_" + noteId)
-                            .build()
-            ));
-            rows.add(new InlineKeyboardRow(
-                    InlineKeyboardButton.builder()
-                            .text("⬅️ Назад")
-                            .callbackData("NOTES_LIST")
-                            .build()
-            ));
-            editMessage(telegramId, messageId, text,
-                    InlineKeyboardMarkup.builder().keyboard(rows).build());
-        }
-    }
-
-    private void handleNotePin(Long telegramId, Integer messageId, String data) {
-        Long noteId = Long.parseLong(data.split("_")[2]);
-        noteService.togglePin(noteId, telegramId);
-        handleNoteView(telegramId, messageId, "NOTE_VIEW_" + noteId);
-    }
-
-    private void showUpcomingMeetings(Long telegramId, Integer messageId) {
-        List<com.taskbot.dto.MeetingDto> meetings = meetingService.getUpcomingMeetings(telegramId);
-        StringBuilder sb = new StringBuilder("📅 Ближайшие встречи:\n\n");
         List<InlineKeyboardRow> rows = new ArrayList<>();
-        if (meetings.isEmpty()) {
-            sb.append("📭 Встреч пока нет.");
-        } else {
-            for (com.taskbot.dto.MeetingDto m : meetings) {
-                sb.append("📌 ").append(m.getTitle())
-                        .append("\n📅 ").append(m.getMeetingDate().format(DATE_FMT))
-                        .append(" 🕐 ").append(m.getMeetingTime().format(TIME_FMT))
-                        .append("\n📍 ").append(m.getLocation() != null ? m.getLocation() : "Не указано")
-                        .append("\n\n");
-                rows.add(new InlineKeyboardRow(
-                        InlineKeyboardButton.builder()
-                                .text("🗑 Удалить")
-                                .callbackData("MEETING_DELETE_" + m.getId())
-                                .build()
-                ));
-            }
-        }
+
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder()
-                        .text("⬅️ Назад")
-                        .callbackData("MENU_MEETINGS")
-                        .build()
+                InlineKeyboardButton.builder().text("📅 " + date.format(DATE_FMT)).callbackData("NONE").build()
         ));
-        editMessage(telegramId, messageId, sb.toString(),
+
+        InlineKeyboardRow hourHeader = new InlineKeyboardRow();
+        hourHeader.add(InlineKeyboardButton.builder().text("🕐 Час:").callbackData("NONE").build());
+        rows.add(hourHeader);
+
+        InlineKeyboardRow hourRow1 = new InlineKeyboardRow();
+        InlineKeyboardRow hourRow2 = new InlineKeyboardRow();
+        for (int h = 0; h < 24; h++) {
+            String label = String.format("%02d", h);
+            InlineKeyboardButton btn = InlineKeyboardButton.builder()
+                    .text(label)
+                    .callbackData("CREATE_TIME_H_" + label)
+                    .build();
+            if (h < 12) hourRow1.add(btn);
+            else hourRow2.add(btn);
+        }
+        rows.add(hourRow1);
+        rows.add(hourRow2);
+
+        InlineKeyboardRow minuteHeader = new InlineKeyboardRow();
+        minuteHeader.add(InlineKeyboardButton.builder().text("⏱ Минуты:").callbackData("NONE").build());
+        rows.add(minuteHeader);
+
+        InlineKeyboardRow minuteRow = new InlineKeyboardRow();
+        for (int m = 0; m < 60; m += 5) {
+            minuteRow.add(InlineKeyboardButton.builder()
+                    .text(String.format("%02d", m))
+                    .callbackData("CREATE_TIME_M_" + String.format("%02d", m))
+                    .build());
+        }
+        rows.add(minuteRow);
+
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("⏭ Без времени").callbackData("CREATE_SKIP_TIME").build()
+        ));
+
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("⬅️ Другая дата").callbackData("CREATE_BACK_DATE").build()
+        ));
+
+        editMessage(telegramId, messageId, "🕐 Выберите время события:",
                 InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
-    private void showUpcomingDoctors(Long telegramId, Integer messageId) {
-        List<com.taskbot.dto.DoctorAppointmentDto> appointments = doctorAppointmentService.getUpcomingAppointments(telegramId);
-        StringBuilder sb = new StringBuilder("👨‍⚕️ Ближайшие записи:\n\n");
+    private void handleTimeSelection(Long telegramId, Integer messageId, String data) {
+        String[] parts = data.split("_");
+        String type = parts[2];
+        String value = parts[3];
+
+        Map<String, String> temp = userTempData.get(telegramId);
+        if (temp == null) return;
+
+        if ("H".equals(type)) {
+            temp.put("selectedHour", value);
+            editMessage(telegramId, messageId, "🕐 Час: " + value + ". Теперь выберите минуты:",
+                    buildMinutePicker());
+        } else if ("M".equals(type)) {
+            String hour = temp.get("selectedHour");
+            if (hour == null) return;
+            LocalTime time = LocalTime.of(Integer.parseInt(hour), Integer.parseInt(value));
+            temp.put("selectedTime", time.toString());
+            showColorPicker(telegramId, messageId);
+        }
+    }
+
+    private InlineKeyboardMarkup buildMinutePicker() {
         List<InlineKeyboardRow> rows = new ArrayList<>();
-        if (appointments.isEmpty()) {
-            sb.append("📭 Записей пока нет.");
-        } else {
-            for (com.taskbot.dto.DoctorAppointmentDto a : appointments) {
-                sb.append("👨‍⚕️ Др. ").append(a.getDoctorName())
-                        .append("\n🏥 ").append(a.getClinicName() != null ? a.getClinicName() : "Не указано")
-                        .append("\n📅 ").append(a.getAppointmentDate().format(DATE_FMT))
-                        .append(" 🕐 ").append(a.getAppointmentTime().format(TIME_FMT))
-                        .append("\n\n");
-                rows.add(new InlineKeyboardRow(
-                        InlineKeyboardButton.builder()
-                                .text("🗑 Удалить")
-                                .callbackData("DOCTOR_DELETE_" + a.getId())
-                                .build()
-                ));
-            }
+        InlineKeyboardRow minuteRow = new InlineKeyboardRow();
+        for (int m = 0; m < 60; m += 5) {
+            minuteRow.add(InlineKeyboardButton.builder()
+                    .text(String.format("%02d", m))
+                    .callbackData("CREATE_TIME_M_" + String.format("%02d", m))
+                    .build());
         }
+        rows.add(minuteRow);
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
+
+    private void handleSkipTime(Long telegramId, Integer messageId) {
+        Map<String, String> temp = userTempData.get(telegramId);
+        if (temp != null) temp.remove("selectedTime");
+        showColorPicker(telegramId, messageId);
+    }
+
+    private void handleBackToDateSelection(Long telegramId, Integer messageId) {
+        Map<String, String> temp = userTempData.get(telegramId);
+        LocalDate date = temp != null && temp.containsKey("selectedDate")
+                ? LocalDate.parse(temp.get("selectedDate"))
+                : LocalDate.now();
+        showCalendar(telegramId, date, true);
+    }
+
+    private void showColorPicker(Long telegramId, Integer messageId) {
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder()
-                        .text("⬅️ Назад")
-                        .callbackData("MENU_DOCTORS")
-                        .build()
+                InlineKeyboardButton.builder().text("🔵 Синий").callbackData("CREATE_COLOR_BLUE").build(),
+                InlineKeyboardButton.builder().text("🔴 Красный").callbackData("CREATE_COLOR_RED").build(),
+                InlineKeyboardButton.builder().text("🟢 Зелёный").callbackData("CREATE_COLOR_GREEN").build()
         ));
-        editMessage(telegramId, messageId, sb.toString(),
+
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("🟡 Жёлтый").callbackData("CREATE_COLOR_YELLOW").build(),
+                InlineKeyboardButton.builder().text("🟣 Фиолет").callbackData("CREATE_COLOR_PURPLE").build(),
+                InlineKeyboardButton.builder().text("🟠 Оранж").callbackData("CREATE_COLOR_ORANGE").build()
+        ));
+
+        editMessage(telegramId, messageId, "🎨 Выберите цвет события:",
                 InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
-    private void showSettings(Long telegramId, Integer messageId) {
-        User user = userService.getUserByTelegramId(telegramId);
-        String text = String.format("""
-                ⚙️ Настройки:
-                
-                🌐 Язык: %s
-                🕐 Часовой пояс: %s
-                🔔 Уведомления: %s
-                """,
-                user.getLanguageCode().toUpperCase(),
-                user.getTimezone(),
-                user.getNotificationsEnabled() ? "ВКЛ" : "ВЫКЛ");
+    private void handleColorSelection(Long telegramId, Integer messageId, String data) {
+        String color = data.substring("CREATE_COLOR_".length());
+        Map<String, String> temp = userTempData.get(telegramId);
+        if (temp != null) {
+            temp.put("color", color);
+            showReminderPicker(telegramId, messageId);
+        }
+    }
+
+    private void showReminderPicker(Long telegramId, Integer messageId) {
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("🔕 Без напоминания").callbackData("CREATE_REM_0").build()
+        ));
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("5 мин").callbackData("CREATE_REM_5").build(),
+                InlineKeyboardButton.builder().text("15 мин").callbackData("CREATE_REM_15").build(),
+                InlineKeyboardButton.builder().text("30 мин").callbackData("CREATE_REM_30").build()
+        ));
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("1 час").callbackData("CREATE_REM_60").build(),
+                InlineKeyboardButton.builder().text("2 часа").callbackData("CREATE_REM_120").build(),
+                InlineKeyboardButton.builder().text("1 день").callbackData("CREATE_REM_1440").build()
+        ));
+
+        editMessage(telegramId, messageId, "🔔 Напоминание заранее:",
+                InlineKeyboardMarkup.builder().keyboard(rows).build());
+    }
+
+    private void handleReminderSelection(Long telegramId, Integer messageId, String data) {
+        int minutes = Integer.parseInt(data.split("_")[2]);
+        Map<String, String> temp = userTempData.get(telegramId);
+        if (temp != null) {
+            temp.put("reminder", String.valueOf(minutes));
+            createEventFromTempData(telegramId, messageId);
+        }
+    }
+
+    private void handleEventView(Long telegramId, Integer messageId, String data) {
+        Long eventId = Long.parseLong(data.split("_")[2]);
+        EventDto event = eventService.getEvent(eventId, telegramId);
+
+        String timeStr = event.getEventTime() != null ? " 🕐 " + event.getEventTime().format(TIME_FMT) : "";
+        String reminderStr = event.getReminderMinutesBefore() != null && event.getReminderMinutesBefore() > 0
+                ? formatReminder(event.getReminderMinutesBefore())
+                : "Без напоминания";
+
+        String text = String.format("%s %s\n\n📅 %s%s\n🎨 %s\n🔔 %s\n\n📝 %s",
+                getColorEmoji(event.getColor()),
+                event.getTitle(),
+                event.getEventDate().format(DATE_FMT),
+                timeStr,
+                getColorName(event.getColor()),
+                reminderStr,
+                event.getDescription() != null ? event.getDescription() : "Без описания");
+
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("🗑 Удалить").callbackData("EVT_DELETE_" + eventId).build()
+        ));
+
+        Map<String, String> temp = userTempData.computeIfAbsent(telegramId, k -> new HashMap<>());
+        String selectedDate = temp.getOrDefault("selectedDate", event.getEventDate().toString());
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("⬅️ Назад").callbackData("EVT_BACK_" + selectedDate).build()
+        ));
+
         editMessage(telegramId, messageId, text,
-                TelegramMenuBuilder.buildSettingsMenu(
-                        user.getLanguageCode(),
-                        user.getTimezone(),
-                        user.getNotificationsEnabled()));
+                InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
-    private String formatTask(TaskDto task) {
-        return String.format("""
-                📌 %s
-                
-                📊 Статус: %s
-                🎯 Приоритет: %s
-                📅 Дедлайн: %s
-                📝 Описание: %s
-                """,
-                task.getTitle(),
-                getStatusEmoji(task.getStatus()) + " " + task.getStatus(),
-                getPriorityEmoji(task.getPriority()) + " " + task.getPriority(),
-                task.getDueDate() != null ? task.getDueDate().format(DATE_FMT) : "Не установлен",
-                task.getDescription() != null ? task.getDescription() : "Нет описания");
+    private void handleEventDelete(Long telegramId, Integer messageId, String data) {
+        Long eventId = Long.parseLong(data.split("_")[2]);
+        eventService.deleteEvent(eventId, telegramId);
+        editMessage(telegramId, messageId, "✅ Событие удалено.", CalendarBuilder.buildCalendar(LocalDate.now(), "CAL"));
     }
 
-    private String formatTaskShort(TaskDto task) {
-        return String.format("%s %s [%s] %s%s",
-                getStatusEmoji(task.getStatus()),
-                task.getTitle(),
-                task.getStatus(),
-                getPriorityEmoji(task.getPriority()),
-                task.getDueDate() != null ? " 📅 " + task.getDueDate().format(DATE_FMT) : "");
+    private void handleBackToDate(Long telegramId, Integer messageId, String data) {
+        String dateStr = data.split("_", 3)[2];
+        LocalDate date = LocalDate.parse(dateStr);
+        handleDaySelection(telegramId, messageId, "CAL_DAY_" + dateStr);
     }
 
-    private String getStatusEmoji(Task.Status status) {
-        return switch (status) {
-            case TODO -> "🟡";
-            case IN_PROGRESS -> "🔵";
-            case DONE -> "✅";
+    private void startCreateEvent(Long telegramId, Integer messageId) {
+        Map<String, String> temp = userTempData.computeIfAbsent(telegramId, k -> new HashMap<>());
+        temp.put("selectedDate", LocalDate.now().toString());
+        userStates.put(telegramId, "CREATE_TITLE");
+        editMessage(telegramId, messageId, "✏️ Введите название события:", null);
+    }
+
+    private void handleStateInput(Long telegramId, String text, String state) {
+        Map<String, String> temp = userTempData.computeIfAbsent(telegramId, k -> new HashMap<>());
+
+        switch (state) {
+            case "CREATE_TITLE" -> {
+                temp.put("title", text);
+                userStates.put(telegramId, "CREATE_DESC");
+                sendMessage(telegramId, "📝 Введите описание (или /skip):", null);
+            }
+            case "CREATE_DESC" -> {
+                if (!"/skip".equals(text)) {
+                    temp.put("description", text);
+                }
+                userStates.remove(telegramId);
+                LocalDate selected = LocalDate.parse(temp.get("selectedDate"));
+                showCalendar(telegramId, selected, true);
+            }
+            default -> {
+                userStates.remove(telegramId);
+                sendMessage(telegramId, "🤔 Неизвестное состояние. /start", CalendarBuilder.buildCalendar(LocalDate.now(), "CAL"));
+            }
+        }
+    }
+
+    private void createEventFromTempData(Long telegramId, Integer messageId) {
+        Map<String, String> temp = userTempData.get(telegramId);
+        if (temp == null) return;
+
+        LocalDate date = LocalDate.parse(temp.get("selectedDate"));
+        LocalTime time = temp.containsKey("selectedTime") ? LocalTime.parse(temp.get("selectedTime")) : null;
+        int reminder = Integer.parseInt(temp.getOrDefault("reminder", "0"));
+
+        EventDto event = eventService.createEvent(telegramId,
+                temp.get("title"),
+                temp.get("description"),
+                date,
+                time,
+                temp.get("color"),
+                reminder > 0 ? reminder : null);
+
+        userStates.remove(telegramId);
+        userTempData.remove(telegramId);
+
+        String timeStr = time != null ? " 🕐 " + time.format(TIME_FMT) : "";
+        sendMessage(telegramId, String.format("✅ Событие создано!\n\n%s %s\n📅 %s%s",
+                getColorEmoji(event.getColor()), event.getTitle(), date.format(DATE_FMT), timeStr),
+                CalendarBuilder.buildCalendar(date, "CAL"));
+    }
+
+    private String getColorEmoji(String color) {
+        return switch (color) {
+            case "RED" -> "🔴";
+            case "GREEN" -> "🟢";
+            case "YELLOW" -> "🟡";
+            case "PURPLE" -> "🟣";
+            case "ORANGE" -> "🟠";
+            default -> "🔵";
         };
     }
 
-    private String getPriorityEmoji(Task.Priority priority) {
-        return switch (priority) {
-            case LOW -> "🟢";
-            case MEDIUM -> "🟡";
-            case HIGH -> "🔴";
+    private String getColorName(String color) {
+        return switch (color) {
+            case "RED" -> "Красный";
+            case "GREEN" -> "Зелёный";
+            case "YELLOW" -> "Жёлтый";
+            case "PURPLE" -> "Фиолетовый";
+            case "ORANGE" -> "Оранжевый";
+            default -> "Синий";
         };
     }
 
-    private InlineKeyboardMarkup buildPriorityKeyboard() {
-        return InlineKeyboardMarkup.builder()
-                .keyboard(List.of(
-                        new InlineKeyboardRow(
-                                InlineKeyboardButton.builder()
-                                        .text("🟢 Низкий")
-                                        .callbackData("PRIORITY_LOW")
-                                        .build(),
-                                InlineKeyboardButton.builder()
-                                        .text("🟡 Средний")
-                                        .callbackData("PRIORITY_MEDIUM")
-                                        .build(),
-                                InlineKeyboardButton.builder()
-                                        .text("🔴 Высокий")
-                                        .callbackData("PRIORITY_HIGH")
-                                        .build()
-                        )
-                ))
-                .build();
+    private String formatReminder(int minutes) {
+        if (minutes >= 1440) return (minutes / 1440) + " дн. до";
+        if (minutes >= 60) return (minutes / 60) + " ч. до";
+        return minutes + " мин. до";
     }
 
     public void sendMainMenu(Long telegramId, String text) {
-        sendMessage(telegramId, text, TelegramMenuBuilder.buildMainMenu());
+        sendMessage(telegramId, text, CalendarBuilder.buildCalendar(LocalDate.now(), "CAL"));
     }
 
     public void sendNotification(Long telegramId, String text) {
@@ -946,6 +562,10 @@ public class TelegramBotService {
     }
 
     private void editMessage(Long chatId, Integer messageId, String text, InlineKeyboardMarkup keyboard) {
+        if (messageId == null) {
+            sendMessage(chatId, text, keyboard);
+            return;
+        }
         try {
             EditMessageText message = EditMessageText.builder()
                     .chatId(chatId)
@@ -956,6 +576,7 @@ public class TelegramBotService {
             telegramClient.execute(message);
         } catch (TelegramApiException e) {
             log.error("Failed to edit message: {}", messageId, e);
+            sendMessage(chatId, text, keyboard);
         }
     }
 }
