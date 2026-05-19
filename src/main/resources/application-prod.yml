@@ -1,0 +1,19 @@
+spring:
+  jpa:
+    show-sql: false
+  flyway:
+    enabled: true
+
+logging:
+  level:
+    root: WARN
+    com.taskbot: INFO
+  file:
+    name: /var/log/taskbot/app.log
+
+server:
+  tomcat:
+    threads:
+      max: 100
+      min-spare: 10
+    max-connections: 200

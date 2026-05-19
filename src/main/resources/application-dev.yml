@@ -1,0 +1,16 @@
+spring:
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+  flyway:
+    enabled: true
+
+bot:
+  enabled: false
+
+logging:
+  level:
+    com.taskbot: DEBUG
+    org.springframework: INFO
+    org.hibernate.SQL: DEBUG

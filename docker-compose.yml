@@ -1,0 +1,61 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: taskbot-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-taskbot}
+      POSTGRES_USER: ${POSTGRES_USER:-taskbot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskbot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - taskbot-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taskbot-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      BOT_TOKEN: ${BOT_TOKEN}
+      BOT_USERNAME: ${BOT_USERNAME}
+      BOT_WEBHOOK_URL: ${BOT_WEBHOOK_URL}
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-taskbot}
+      POSTGRES_USER: ${POSTGRES_USER:-taskbot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      ENCRYPTION_SECRET_KEY: ${ENCRYPTION_SECRET_KEY}
+      ADMIN_TELEGRAM_IDS: ${ADMIN_TELEGRAM_IDS:-}
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - taskbot-network
+
+volumes:
+  postgres-data:
+    driver: local
+
+networks:
+  taskbot-network:
+    driver: bridge
