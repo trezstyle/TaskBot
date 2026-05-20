@@ -74,16 +74,19 @@ public class TelegramBotService {
 
         if ("/start".equals(text)) {
             calendarHandler.showCalendar(telegramId, LocalDate.now());
+        } else if ("/list".equals(text)) {
+            calendarHandler.handleCallback(telegramId, null, "LIST_UPCOMING");
         } else if ("/help".equals(text)) {
             sendMessage(telegramId, """
-                    \ud83d\udcd6 Доступные команды:
+                    📖 Доступные команды:
                     
                     /start - Календарь
+                    /list - Список событий
                     /cancel - Отменить действие
                     /help - Эта справка
                     
-                    \ud83d\udca1 Нажмите на дату чтобы увидеть события.
-                    \ud83d\udca1 "+" для создания нового события.
+                    💡 Нажмите на дату чтобы увидеть события.
+                    💡 «+» для создания нового события.
                     """, null);
         } else {
             sendMessage(telegramId, "\ud83e\udd14 Используйте /start для календаря.", null);
@@ -103,6 +106,11 @@ public class TelegramBotService {
         if (data.equals("MENU_MAIN")) {
             creationHandler.cancelCreation(telegramId);
             calendarHandler.showCalendar(telegramId, LocalDate.now());
+            return;
+        }
+
+        if (data.equals("LIST_UPCOMING") || data.startsWith("LIST_PAGE_")) {
+            calendarHandler.handleCallback(telegramId, messageId, data);
             return;
         }
 

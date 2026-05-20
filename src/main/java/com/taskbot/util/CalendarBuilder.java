@@ -85,11 +85,12 @@ public class CalendarBuilder {
         }
 
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("➕ Добавить событие").callbackData(callbackPrefix + "_ADD").build()
+                InlineKeyboardButton.builder().text("➕ Создать").callbackData(callbackPrefix + "_ADD").build(),
+                InlineKeyboardButton.builder().text("📋 Список").callbackData("LIST_UPCOMING").build()
         ));
 
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("🏠 Главное меню").callbackData("MENU_MAIN").build()
+                InlineKeyboardButton.builder().text("🏠 Старт").callbackData("MENU_MAIN").build()
         ));
 
         return InlineKeyboardMarkup.builder().keyboard(rows).build();

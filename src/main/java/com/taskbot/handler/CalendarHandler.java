@@ -51,6 +51,17 @@ public class CalendarHandler {
             return true;
         }
 
+        if (data.equals("LIST_UPCOMING")) {
+            showUpcomingEvents(telegramId);
+            return true;
+        }
+
+        if (data.startsWith("LIST_PAGE_")) {
+            int page = Integer.parseInt(data.substring("LIST_PAGE_".length()));
+            showUpcomingEvents(telegramId, page);
+            return true;
+        }
+
         if (data.equals("CAL_PREV") || data.equals("CAL_NEXT")) {
             navigateMonth(telegramId, messageId, data.equals("CAL_NEXT"));
             return true;
@@ -126,14 +137,15 @@ public class CalendarHandler {
 
         rows.add(new InlineKeyboardRow(
                 InlineKeyboardButton.builder()
-                        .text("➕ Создать событие")
+                        .text("➕ Создать")
                         .callbackData("CAL_ADD")
-                        .build()
-        ));
-
-        rows.add(new InlineKeyboardRow(
+                        .build(),
                 InlineKeyboardButton.builder()
-                        .text("📅 Календарь")
+                        .text("📋 Список")
+                        .callbackData("LIST_UPCOMING")
+                        .build(),
+                InlineKeyboardButton.builder()
+                        .text("🏠 Старт")
                         .callbackData("MENU_MAIN")
                         .build()
         ));
@@ -168,15 +180,68 @@ public class CalendarHandler {
 
         String selDate = selectedDates.getOrDefault(telegramId, event.getEventDate().toString());
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("⬅️ Назад").callbackData("EVT_BACK_" + selDate).build()
-        ));
-
-        rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("📅 Календарь").callbackData("MENU_MAIN").build()
+                InlineKeyboardButton.builder().text("⬅️ Назад").callbackData("EVT_BACK_" + selDate).build(),
+                InlineKeyboardButton.builder().text("📋 Список").callbackData("LIST_UPCOMING").build(),
+                InlineKeyboardButton.builder().text("🏠 Старт").callbackData("MENU_MAIN").build()
         ));
 
         editMessage(telegramId, messageId, text,
                 InlineKeyboardMarkup.builder().keyboard(rows).build());
+    }
+
+    private void showUpcomingEvents(Long telegramId) {
+        showUpcomingEvents(telegramId, 0);
+    }
+
+    private void showUpcomingEvents(Long telegramId, int page) {
+        List<EventDto> events = eventService.getUpcomingEvents(telegramId);
+        int pageSize = 5;
+        int totalPages = Math.max(1, (int) Math.ceil((double) events.size() / pageSize));
+
+        if (page >= totalPages) page = totalPages - 1;
+        if (page < 0) page = 0;
+
+        int from = page * pageSize;
+        int to = Math.min(from + pageSize, events.size());
+        List<EventDto> pageEvents = events.subList(from, to);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("📋 Предстоящие события");
+
+        if (events.isEmpty()) {
+            sb.append("\n\n📭 Нет предстоящих событий.");
+        } else {
+            sb.append(" (").append(from + 1).append("-").append(to).append(" из ").append(events.size()).append(")\n\n");
+            for (EventDto e : pageEvents) {
+                String timeStr = e.getEventTime() != null ? " 🕐 " + e.getEventTime().format(
+                        DateTimeFormatter.ofPattern("HH:mm")) : "";
+                sb.append(getColorEmoji(e.getColor())).append(" ")
+                        .append(e.getEventDate().format(DATE_FMT)).append(timeStr)
+                        .append("\n   ").append(e.getTitle()).append("\n");
+            }
+        }
+
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        for (EventDto e : pageEvents) {
+            rows.add(new InlineKeyboardRow(
+                    InlineKeyboardButton.builder()
+                            .text("👁 " + e.getTitle())
+                            .callbackData("EVT_VIEW_" + e.getId())
+                            .build()
+            ));
+        }
+
+        List<InlineKeyboardButton> navRow = new ArrayList<>();
+        if (page > 0) {
+            navRow.add(InlineKeyboardButton.builder().text("⬅️ Назад").callbackData("LIST_PAGE_" + (page - 1)).build());
+        }
+        navRow.add(InlineKeyboardButton.builder().text("🏠 Старт").callbackData("MENU_MAIN").build());
+        if (page < totalPages - 1) {
+            navRow.add(InlineKeyboardButton.builder().text("➡️ Далее").callbackData("LIST_PAGE_" + (page + 1)).build());
+        }
+        rows.add(new InlineKeyboardRow(navRow));
+
+        sendMessage(telegramId, sb.toString(), InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
     private void handleEventDelete(Long telegramId, Integer messageId, String data) {

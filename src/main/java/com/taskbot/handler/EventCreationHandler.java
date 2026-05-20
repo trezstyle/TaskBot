@@ -137,20 +137,26 @@ public class EventCreationHandler {
                         .build()
         ));
 
+        // Утро: 06-11
         rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
+                btn("06:00", "CREATE_TIME_06:00"), btn("07:00", "CREATE_TIME_07:00"),
                 btn("08:00", "CREATE_TIME_08:00"), btn("09:00", "CREATE_TIME_09:00"),
                 btn("10:00", "CREATE_TIME_10:00"), btn("11:00", "CREATE_TIME_11:00")
         ));
+        // День: 12-17
         rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
                 btn("12:00", "CREATE_TIME_12:00"), btn("13:00", "CREATE_TIME_13:00"),
-                btn("14:00", "CREATE_TIME_14:00"), btn("15:00", "CREATE_TIME_15:00")
+                btn("14:00", "CREATE_TIME_14:00"), btn("15:00", "CREATE_TIME_15:00"),
+                btn("16:00", "CREATE_TIME_16:00"), btn("17:00", "CREATE_TIME_17:00")
         ));
+        // Вечер: 18-23
         rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
-                btn("16:00", "CREATE_TIME_16:00"), btn("17:00", "CREATE_TIME_17:00"),
-                btn("18:00", "CREATE_TIME_18:00"), btn("19:00", "CREATE_TIME_19:00")
+                btn("18:00", "CREATE_TIME_18:00"), btn("19:00", "CREATE_TIME_19:00"),
+                btn("20:00", "CREATE_TIME_20:00"), btn("21:00", "CREATE_TIME_21:00"),
+                btn("22:00", "CREATE_TIME_22:00"), btn("23:00", "CREATE_TIME_23:00")
         ));
+        // Управление
         rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
-                btn("20:00", "CREATE_TIME_20:00"),
                 org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
                         .text("🕐 Свой час")
                         .callbackData("CREATE_TIME_CUSTOM")
@@ -158,12 +164,6 @@ public class EventCreationHandler {
                 org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
                         .text("⏭ Без времени")
                         .callbackData("CREATE_TIME_SKIP")
-                        .build()
-        ));
-        rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
-                org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
-                        .text("💾 Сохранить сейчас")
-                        .callbackData("CREATE_SAVE")
                         .build()
         ));
 
@@ -291,6 +291,10 @@ public class EventCreationHandler {
                 org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
                         .text("✖️ Отмена")
                         .callbackData("MENU_MAIN")
+                        .build(),
+                org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
+                        .text("📋 Список")
+                        .callbackData("LIST_UPCOMING")
                         .build()
         ));
 
@@ -325,7 +329,15 @@ public class EventCreationHandler {
         String msg = String.format("✅ Событие создано!\n\n🔵 %s\n📅 %s%s",
                 event.getTitle(), date.format(DATE_FMT), timeStr);
 
-        editMessage(telegramId, messageId, msg, null);
+        try {
+            SendMessage message = SendMessage.builder()
+                    .chatId(telegramId)
+                    .text(msg)
+                    .build();
+            telegramClient.execute(message);
+        } catch (TelegramApiException e) {
+            log.error("Failed to send event creation confirmation", e);
+        }
     }
 
     public void sendCreationSuccessMessage(Long telegramId, EventDto event) {
