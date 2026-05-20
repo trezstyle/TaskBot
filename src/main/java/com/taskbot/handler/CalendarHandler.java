@@ -51,6 +51,16 @@ public class CalendarHandler {
             return true;
         }
 
+        if (data.startsWith("LIST_DELETE_YES_")) {
+            handleListDeleteConfirm(telegramId, messageId, data);
+            return true;
+        }
+
+        if (data.startsWith("LIST_DELETE_")) {
+            handleListDeletePrompt(telegramId, messageId, data);
+            return true;
+        }
+
         if (data.equals("LIST_UPCOMING")) {
             showUpcomingEvents(telegramId);
             return true;
@@ -227,6 +237,10 @@ public class CalendarHandler {
                     InlineKeyboardButton.builder()
                             .text("👁 " + e.getTitle())
                             .callbackData("EVT_VIEW_" + e.getId())
+                            .build(),
+                    InlineKeyboardButton.builder()
+                            .text("🗑")
+                            .callbackData("LIST_DELETE_" + e.getId())
                             .build()
             ));
         }
@@ -246,9 +260,38 @@ public class CalendarHandler {
 
     private void handleEventDelete(Long telegramId, Integer messageId, String data) {
         Long eventId = Long.parseLong(data.substring("EVT_DELETE_".length()));
+        EventDto event = eventService.getEvent(eventId, telegramId);
         eventService.deleteEvent(eventId, telegramId);
+        sendMessage(telegramId, "🗑 Удалено: " + event.getTitle(), null);
         calendarDates.remove(telegramId);
         showCalendar(telegramId, LocalDate.now());
+    }
+
+    private void handleListDeletePrompt(Long telegramId, Integer messageId, String data) {
+        Long eventId = Long.parseLong(data.substring("LIST_DELETE_".length()));
+        EventDto event = eventService.getEvent(eventId, telegramId);
+
+        DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern("HH:mm");
+        String timeStr = event.getEventTime() != null ? " 🕐 " + event.getEventTime().format(timeFmt) : "";
+        String text = String.format("🗑 Удалить событие?\n\n%s %s\n📅 %s%s",
+                getColorEmoji(event.getColor()), event.getTitle(),
+                event.getEventDate().format(DATE_FMT), timeStr);
+
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("✅ Да, удалить").callbackData("LIST_DELETE_YES_" + eventId).build(),
+                InlineKeyboardButton.builder().text("❌ Отмена").callbackData("LIST_UPCOMING").build()
+        ));
+
+        editMessage(telegramId, messageId, text, InlineKeyboardMarkup.builder().keyboard(rows).build());
+    }
+
+    private void handleListDeleteConfirm(Long telegramId, Integer messageId, String data) {
+        Long eventId = Long.parseLong(data.substring("LIST_DELETE_YES_".length()));
+        EventDto event = eventService.getEvent(eventId, telegramId);
+        eventService.deleteEvent(eventId, telegramId);
+        sendMessage(telegramId, "🗑 Удалено: " + event.getTitle(), null);
+        showUpcomingEvents(telegramId);
     }
 
     private void handleBackToDay(Long telegramId, Integer messageId, String data) {

@@ -5,10 +5,13 @@ import json
 import wave
 
 try:
-    from vosk import Model, KaldiRecognizer
+    from vosk import Model, KaldiRecognizer, SetLogLevel
 except ImportError:
     print("ERROR: vosk module not installed", file=sys.stderr)
     sys.exit(1)
+
+# Suppress Vosk C++ log messages (LOG lines) so they don't leak into stdout
+SetLogLevel(-1)
 
 MODEL_PATH = "/app/vosk-model"
 

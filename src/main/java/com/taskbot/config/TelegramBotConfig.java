@@ -1,6 +1,5 @@
 package com.taskbot.config;
 
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -21,12 +20,5 @@ public class TelegramBotConfig {
     @Bean
     public TelegramClient telegramClient() {
         return new OkHttpTelegramClient(botToken);
-    }
-
-    @PostConstruct
-    public void init() {
-        log.info("Telegram Bot configured: username={}", botUsername);
-        String masked = botToken.length() > 8 ? botToken.substring(0, 8) + "..." : "***";
-        log.info("Bot token loaded: {}", masked);
     }
 }

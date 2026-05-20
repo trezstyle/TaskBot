@@ -146,7 +146,8 @@ public class TelegramBotService {
             return;
         }
 
-        if (data.equals("LIST_UPCOMING") || data.startsWith("LIST_PAGE_")) {
+        if (data.equals("LIST_UPCOMING") || data.startsWith("LIST_PAGE_")
+                || data.startsWith("LIST_DELETE_") || data.startsWith("LIST_DELETE_YES_")) {
             calendarHandler.handleCallback(telegramId, messageId, data);
             return;
         }

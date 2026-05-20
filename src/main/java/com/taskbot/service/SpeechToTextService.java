@@ -84,11 +84,11 @@ public class SpeechToTextService {
 
             // 4. Run Vosk transcription
             ProcessBuilder voskPb = new ProcessBuilder(PYTHON_BIN, VOSK_SCRIPT, wavFile.toString());
-            voskPb.redirectErrorStream(true);
             Process voskProc = voskPb.start();
+            // Read stdout (transcription) first, then stderr separately to avoid mixing
             String result = new String(voskProc.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
-            String errors = new String(voskProc.getErrorStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
             boolean voskOk = voskProc.waitFor(60, TimeUnit.SECONDS);
+            String errors = new String(voskProc.getErrorStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
 
             if (!voskOk || voskProc.exitValue() != 0) {
                 log.error("Vosk failed: exit={}, result={}, errors={}", voskProc.exitValue(), result, errors);
