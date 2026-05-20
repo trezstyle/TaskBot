@@ -80,7 +80,7 @@ public class EventCreationHandler {
             handleCalendarNavigation(telegramId, messageId, data);
             return true;
         }
-        if (data.startsWith("CREATE_TIME_")) {
+        if (data.startsWith("CREATE_TIME_") || data.equals("CREATE_BACK_TIME")) {
             handleTimeSelection(telegramId, messageId, data);
             return true;
         }
@@ -150,30 +150,31 @@ String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
                         .build()
         ));
 
-        // Утро: 06-11
+        // Morning: 06-11
         rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
-                btn("06:00", "CREATE_TIME_06:00"), btn("07:00", "CREATE_TIME_07:00"),
-                btn("08:00", "CREATE_TIME_08:00"), btn("09:00", "CREATE_TIME_09:00"),
-                btn("10:00", "CREATE_TIME_10:00"), btn("11:00", "CREATE_TIME_11:00")
+                btn("06", "CREATE_TIME_H_06"), btn("07", "CREATE_TIME_H_07"),
+                btn("08", "CREATE_TIME_H_08"), btn("09", "CREATE_TIME_H_09"),
+                btn("10", "CREATE_TIME_H_10"), btn("11", "CREATE_TIME_H_11")
         ));
-        // День: 12-17
+        // Day: 12-17
         rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
-                btn("12:00", "CREATE_TIME_12:00"), btn("13:00", "CREATE_TIME_13:00"),
-                btn("14:00", "CREATE_TIME_14:00"), btn("15:00", "CREATE_TIME_15:00"),
-                btn("16:00", "CREATE_TIME_16:00"), btn("17:00", "CREATE_TIME_17:00")
+                btn("12", "CREATE_TIME_H_12"), btn("13", "CREATE_TIME_H_13"),
+                btn("14", "CREATE_TIME_H_14"), btn("15", "CREATE_TIME_H_15"),
+                btn("16", "CREATE_TIME_H_16"), btn("17", "CREATE_TIME_H_17")
         ));
-        // Вечер: 18-23
+        // Evening: 18-23
         rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
-                btn("18:00", "CREATE_TIME_18:00"), btn("19:00", "CREATE_TIME_19:00"),
-                btn("20:00", "CREATE_TIME_20:00"), btn("21:00", "CREATE_TIME_21:00"),
-                btn("22:00", "CREATE_TIME_22:00"), btn("23:00", "CREATE_TIME_23:00")
+                btn("18", "CREATE_TIME_H_18"), btn("19", "CREATE_TIME_H_19"),
+                btn("20", "CREATE_TIME_H_20"), btn("21", "CREATE_TIME_H_21"),
+                btn("22", "CREATE_TIME_H_22"), btn("23", "CREATE_TIME_H_23")
         ));
-        // Управление
+        // Night + controls
         rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
-                org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
-                        .text("🕐 Custom hour")
-                        .callbackData("CREATE_TIME_CUSTOM")
-                        .build(),
+                btn("00", "CREATE_TIME_H_00"), btn("01", "CREATE_TIME_H_01"),
+                btn("02", "CREATE_TIME_H_02"), btn("03", "CREATE_TIME_H_03"),
+                btn("04", "CREATE_TIME_H_04"), btn("05", "CREATE_TIME_H_05")
+        ));
+        rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
                 org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
                         .text("⏭ No time")
                         .callbackData("CREATE_TIME_SKIP")
@@ -181,64 +182,51 @@ String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
         ));
 
         editMessage(telegramId, messageId,
-                "🕐 " + date.format(DATE_FMT) + "\n\nSelect time or skip:",
+                "🕐 " + date.format(DATE_FMT) + "\n\nSelect hour:",
                 InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
-    private void showCustomTimePicker(Long telegramId, Integer messageId) {
+    private void showMinutePicker(Long telegramId, Integer messageId, String hour, LocalDate date) {
         var rows = new java.util.ArrayList<org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow>();
 
-        var hourHeader = new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow();
-        hourHeader.add(btnDummy("🕐 Час:"));
-        rows.add(hourHeader);
-
-        var hourRow1 = new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow();
-        var hourRow2 = new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow();
-        for (int h = 0; h < 24; h++) {
-            String label = String.format("%02d", h);
-            var b = btn(label, "CREATE_TIME_H_" + label);
-            if (h < 12) hourRow1.add(b);
-            else hourRow2.add(b);
-        }
-        rows.add(hourRow1);
-        rows.add(hourRow2);
-
-        var minuteHeader = new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow();
-        minuteHeader.add(btnDummy("⏱ Минуты:"));
-        rows.add(minuteHeader);
-
-        var minuteRow = new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow();
-        for (int m = 0; m < 60; m += 5) {
-            minuteRow.add(btn(String.format("%02d", m), "CREATE_TIME_M_" + String.format("%02d", m)));
-        }
-        rows.add(minuteRow);
-
         rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
-                org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
-                        .text("⬅️ Back")
-                        .callbackData("CREATE_BACK_DATE")
-                        .build(),
-                org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
-                        .text("⏭ Skip")
-                        .callbackData("CREATE_SAVE")
-                        .build()
+                btnDummy("🕐 " + hour + ":__  " + date.format(DATE_FMT))
         ));
 
-        Map<String, String> temp = getTemp(telegramId);
-        LocalDate date = LocalDate.parse(temp.get("selectedDate"));
+        // :00, :15, :30, :45 — most common
+        rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
+                btn(hour + ":00", "CREATE_TIME_" + hour + ":00"),
+                btn(hour + ":15", "CREATE_TIME_" + hour + ":15"),
+                btn(hour + ":30", "CREATE_TIME_" + hour + ":30"),
+                btn(hour + ":45", "CREATE_TIME_" + hour + ":45")
+        ));
+
+        // :05, :10, :20, :25, :35, :40, :50, :55
+        rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
+                btn(":05", "CREATE_TIME_" + hour + ":05"),
+                btn(":10", "CREATE_TIME_" + hour + ":10"),
+                btn(":20", "CREATE_TIME_" + hour + ":20"),
+                btn(":25", "CREATE_TIME_" + hour + ":25")
+        ));
+        rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
+                btn(":35", "CREATE_TIME_" + hour + ":35"),
+                btn(":40", "CREATE_TIME_" + hour + ":40"),
+                btn(":50", "CREATE_TIME_" + hour + ":50"),
+                btn(":55", "CREATE_TIME_" + hour + ":55")
+        ));
+
+        rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
+                btn("⬅️ Back to hours", "CREATE_BACK_TIME"),
+                btn("⏭ No time", "CREATE_TIME_SKIP")
+        ));
 
         editMessage(telegramId, messageId,
-                "🕐 " + date.format(DATE_FMT) + "\n\nSelect hour, then minutes:",
+                "🕐 " + hour + ":__\n\nSelect minutes:",
                 InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
     private void handleTimeSelection(Long telegramId, Integer messageId, String data) {
         Map<String, String> temp = getTemp(telegramId);
-
-        if (data.equals("CREATE_TIME_CUSTOM")) {
-            showCustomTimePicker(telegramId, messageId);
-            return;
-        }
 
         if (data.equals("CREATE_TIME_SKIP")) {
             temp.remove("selectedTime");
@@ -246,48 +234,24 @@ String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
             return;
         }
 
+        if (data.equals("CREATE_BACK_TIME")) {
+            LocalDate date = LocalDate.parse(temp.get("selectedDate"));
+            showQuickTimePicker(telegramId, messageId, date);
+            return;
+        }
+
         if (data.startsWith("CREATE_TIME_H_")) {
             String hour = data.substring("CREATE_TIME_H_".length());
             temp.put("selectedHour", hour);
-            showMinutePickerOnly(telegramId, messageId, hour);
+            LocalDate date = LocalDate.parse(temp.get("selectedDate"));
+            showMinutePicker(telegramId, messageId, hour, date);
             return;
         }
 
-        if (data.startsWith("CREATE_TIME_M_")) {
-            String hour = temp.get("selectedHour");
-            if (hour == null) return;
-            String minute = data.substring("CREATE_TIME_M_".length());
-            LocalTime time = LocalTime.of(Integer.parseInt(hour), Integer.parseInt(minute));
-            temp.put("selectedTime", time.toString());
-            promptTitle(telegramId, messageId);
-            return;
-        }
-
+        // CREATE_TIME_HH:MM — final time selection
         LocalTime time = LocalTime.parse(data.substring("CREATE_TIME_".length()));
         temp.put("selectedTime", time.toString());
         promptTitle(telegramId, messageId);
-    }
-
-    private void showMinutePickerOnly(Long telegramId, Integer messageId, String hour) {
-        var rows = new java.util.ArrayList<org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow>();
-
-        var header = new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow();
-        header.add(btnDummy("🕐 Час: " + hour + " → выберите минуты:"));
-        rows.add(header);
-
-        var minuteRow = new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow();
-        for (int m = 0; m < 60; m += 5) {
-            minuteRow.add(btn(String.format("%02d", m), "CREATE_TIME_M_" + String.format("%02d", m)));
-        }
-        rows.add(minuteRow);
-
-        rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
-                btn("⬅️ Back", "CREATE_TIME_CUSTOM")
-        ));
-
-        editMessage(telegramId, messageId,
-                "🕐 Час: " + hour + ". Теперь выберите минуты:",
-                InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
     private void promptTitle(Long telegramId, Integer messageId) {
