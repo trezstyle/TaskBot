@@ -61,7 +61,7 @@ public class CalendarBuilder {
         for (int day = 1; day <= daysInMonth; day++) {
             LocalDate date = firstDay.withDayOfMonth(day);
             int count = eventCounts.getOrDefault(date, 0);
-            String label = count > 0 ? String.valueOf(day) + "•" : String.valueOf(day);
+            String label = count > 0 ? day + " \u2b50" : String.valueOf(day);
 
             if (date.equals(LocalDate.now())) {
                 label = "【" + label + "】";
