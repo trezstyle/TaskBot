@@ -23,10 +23,10 @@ public class BotCommandRegistrar {
         try {
             SetMyCommands setCommands = SetMyCommands.builder()
                     .commands(List.of(
-                            new BotCommand("start", "📅 Календарь"),
-                            new BotCommand("list", "📋 Список событий"),
-                            new BotCommand("cancel", "❌ Отменить действие"),
-                            new BotCommand("help", "📖 Справка")
+                            new BotCommand("start", "📅 Calendar"),
+                            new BotCommand("list", "📋 Event list"),
+                            new BotCommand("cancel", "❌ Cancel action"),
+                            new BotCommand("help", "📖 Help")
                     ))
                     .build();
             telegramClient.execute(setCommands);
