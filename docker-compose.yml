@@ -32,6 +32,8 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      TZ: Europe/Berlin
+      JAVA_OPTS: -Duser.timezone=Europe/Berlin
       SPRING_PROFILES_ACTIVE: prod
       BOT_TOKEN: ${BOT_TOKEN}
       BOT_USERNAME: ${BOT_USERNAME}
