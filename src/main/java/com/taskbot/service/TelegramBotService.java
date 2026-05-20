@@ -66,7 +66,7 @@ public class TelegramBotService {
         if (creationHandler.isInCreationFlow(telegramId)) {
             if ("/cancel".equals(text)) {
                 creationHandler.cancelCreation(telegramId);
-                sendMessage(telegramId, "\u274c Действие отменено.", null);
+                sendMessage(telegramId, "❌ Cancelled.", null);
                 calendarHandler.showCalendar(telegramId, LocalDate.now());
                 return;
             }
@@ -76,7 +76,7 @@ public class TelegramBotService {
 
         if ("/cancel".equals(text)) {
             creationHandler.cancelCreation(telegramId);
-            sendMessage(telegramId, "\u274c Действие отменено.", null);
+            sendMessage(telegramId, "❌ Cancelled.", null);
             return;
         }
 
@@ -107,25 +107,25 @@ public class TelegramBotService {
 
         if (creationHandler.isInCreationFlow(telegramId)) {
             // User is in event creation flow - transcribe voice as title
-            sendMessage(telegramId, "🎙 Распознаю голос...", null);
+            sendMessage(telegramId, "🎙 Transcribing...", null);
             String text = speechToTextService.transcribeVoice(voice.getFileId(), telegramClient);
 
             if (text != null && !text.isBlank()) {
-                sendMessage(telegramId, "📝 Распознано: " + text, null);
+                sendMessage(telegramId, "📝 Recognized: " + text, null);
                 creationHandler.handleTextInput(telegramId, message.getMessageId(), text);
             } else {
-                sendMessage(telegramId, "🎙 Не удалось распознать. Введите название текстом:", null);
+                sendMessage(telegramId, "🎙 Could not recognize. Please type the title:", null);
             }
         } else {
             // Not in creation flow - start quick event from voice
-            sendMessage(telegramId, "🎙 Распознаю голос...", null);
+            sendMessage(telegramId, "🎙 Transcribing...", null);
             String text = speechToTextService.transcribeVoice(voice.getFileId(), telegramClient);
 
             if (text != null && !text.isBlank()) {
                 creationHandler.startQuickEventFromVoice(telegramId, text);
-                sendMessage(telegramId, "📝 Распознано: " + text + "\n\nВыберите дату и время:", null);
+                sendMessage(telegramId, "📝 Recognized: " + text + "\n\nSelect date and time:", null);
             } else {
-                sendMessage(telegramId, "🎙 Не удалось распознать голос. Попробуйте ещё раз или используйте /start", null);
+                sendMessage(telegramId, "🎙 Could not recognize. Try again or use /start", null);
             }
         }
     }
@@ -147,7 +147,10 @@ public class TelegramBotService {
         }
 
         if (data.equals("LIST_UPCOMING") || data.startsWith("LIST_PAGE_")
-                || data.startsWith("LIST_DELETE_") || data.startsWith("LIST_DELETE_YES_")) {
+                || data.startsWith("LIST_DELETE_") || data.startsWith("LIST_DELETE_YES_")
+                || data.equals("LIST_PAST") || data.startsWith("LIST_PAST_PAGE_")
+                || data.startsWith("LIST_PAST_DELETE_") || data.startsWith("LIST_PAST_DELETE_YES_")
+                || data.equals("LIST_PAST_CLEAR") || data.equals("LIST_PAST_CLEAR_YES")) {
             calendarHandler.handleCallback(telegramId, messageId, data);
             return;
         }

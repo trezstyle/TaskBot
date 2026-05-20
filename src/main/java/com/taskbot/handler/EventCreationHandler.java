@@ -105,7 +105,7 @@ public class EventCreationHandler {
                 : LocalDate.parse(temp.getOrDefault("selectedDate", LocalDate.now().toString()));
 
         String monthName = date.getMonth().getDisplayName(java.time.format.TextStyle.FULL, new java.util.Locale("ru"));
-        String text = String.format("➕ Новое событие\n📅 %s %d\n\nВыберите дату:",
+String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
                 monthName, date.getYear());
 
         editMessage(telegramId, messageId, text,
@@ -171,17 +171,17 @@ public class EventCreationHandler {
         // Управление
         rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
                 org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
-                        .text("🕐 Свой час")
+                        .text("🕐 Custom hour")
                         .callbackData("CREATE_TIME_CUSTOM")
                         .build(),
                 org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
-                        .text("⏭ Без времени")
+                        .text("⏭ No time")
                         .callbackData("CREATE_TIME_SKIP")
                         .build()
         ));
 
         editMessage(telegramId, messageId,
-                "🕐 " + date.format(DATE_FMT) + "\n\nВыберите время или пропустите:",
+                "🕐 " + date.format(DATE_FMT) + "\n\nSelect time or skip:",
                 InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
@@ -215,11 +215,11 @@ public class EventCreationHandler {
 
         rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
                 org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
-                        .text("⬅️ Назад")
+                        .text("⬅️ Back")
                         .callbackData("CREATE_BACK_DATE")
                         .build(),
                 org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
-                        .text("⏭ Пропустить")
+                        .text("⏭ Skip")
                         .callbackData("CREATE_SAVE")
                         .build()
         ));
@@ -228,7 +228,7 @@ public class EventCreationHandler {
         LocalDate date = LocalDate.parse(temp.get("selectedDate"));
 
         editMessage(telegramId, messageId,
-                "🕐 " + date.format(DATE_FMT) + "\n\nВыберите час, затем минуты:",
+                "🕐 " + date.format(DATE_FMT) + "\n\nSelect hour, then minutes:",
                 InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
@@ -282,7 +282,7 @@ public class EventCreationHandler {
         rows.add(minuteRow);
 
         rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
-                btn("⬅️ Назад", "CREATE_TIME_CUSTOM")
+                btn("⬅️ Back", "CREATE_TIME_CUSTOM")
         ));
 
         editMessage(telegramId, messageId,
@@ -296,23 +296,23 @@ public class EventCreationHandler {
         Map<String, String> temp = getTemp(telegramId);
         LocalDate date = LocalDate.parse(temp.get("selectedDate"));
         String timeInfo = temp.containsKey("selectedTime")
-                ? " в " + LocalTime.parse(temp.get("selectedTime")).format(TIME_FMT)
-                : " (без времени)";
+                ? " at " + LocalTime.parse(temp.get("selectedTime")).format(TIME_FMT)
+                : " (no time)";
 
         var rows = new java.util.ArrayList<org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow>();
         rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
                 org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
-                        .text("✖️ Отмена")
+                        .text("✖️ Cancel")
                         .callbackData("MENU_MAIN")
                         .build(),
                 org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton.builder()
-                        .text("📋 Список")
+                        .text("📋 List")
                         .callbackData("LIST_UPCOMING")
                         .build()
         ));
 
         editMessage(telegramId, messageId,
-                "📅 " + date.format(DATE_FMT) + timeInfo + "\n\n✏️ Опишите событие одной фразой (название):",
+                "📅 " + date.format(DATE_FMT) + timeInfo + "\n\n✏️ Describe the event (title):",
                 InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
@@ -339,7 +339,7 @@ public class EventCreationHandler {
         tempData.remove(telegramId);
 
         String timeStr = time != null ? " 🕐 " + time.format(TIME_FMT) : "";
-        String msg = String.format("✅ Событие создано!\n\n🔵 %s\n📅 %s%s",
+        String msg = String.format("✅ Event created!\n\n🔵 %s\n📅 %s%s",
                 event.getTitle(), date.format(DATE_FMT), timeStr);
 
         try {
@@ -355,7 +355,7 @@ public class EventCreationHandler {
 
     public void sendCreationSuccessMessage(Long telegramId, EventDto event) {
         String timeStr = event.getEventTime() != null ? " 🕐 " + event.getEventTime().format(TIME_FMT) : "";
-        String msg = String.format("✅ Событие создано!\n\n🔵 %s\n📅 %s%s",
+        String msg = String.format("✅ Event created!\n\n🔵 %s\n📅 %s%s",
                 event.getTitle(), event.getEventDate().format(DATE_FMT), timeStr);
 
         try {

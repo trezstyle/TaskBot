@@ -85,6 +85,27 @@ public class EventService {
     }
 
     @Transactional(readOnly = true)
+    public List<EventDto> getPastEvents(Long telegramId) {
+        User user = userService.getUserByTelegramId(telegramId);
+        return eventRepository.findByUserIdAndEventDateLessThanOrderByEventDateDescEventTimeDesc(
+                        user.getId(), LocalDate.now())
+                .stream()
+                .map(eventMapper::toDto)
+                .toList();
+    }
+
+    @Transactional
+    public int deleteAllPastEvents(Long telegramId) {
+        User user = userService.getUserByTelegramId(telegramId);
+        List<Event> pastEvents = eventRepository.findByUserIdAndEventDateLessThanOrderByEventDateDescEventTimeDesc(
+                user.getId(), LocalDate.now());
+        int count = pastEvents.size();
+        eventRepository.deleteAll(pastEvents);
+        log.info("Deleted {} past events for user {}", count, user.getId());
+        return count;
+    }
+
+    @Transactional(readOnly = true)
     public Page<EventDto> getUserEvents(Long telegramId, int page, int size) {
         User user = userService.getUserByTelegramId(telegramId);
         Pageable pageable = PageRequest.of(page, size);

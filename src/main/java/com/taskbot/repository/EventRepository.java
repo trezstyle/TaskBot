@@ -22,6 +22,11 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     List<Event> findByUserIdAndEventDateGreaterThanEqualOrderByEventDateAscEventTimeAsc(
             Long userId, LocalDate date);
 
+    List<Event> findByUserIdAndEventDateLessThanOrderByEventDateDescEventTimeDesc(
+            Long userId, LocalDate date);
+
+    void deleteAllByUserIdAndEventDateLessThan(Long userId, LocalDate date);
+
     @Query(value = "SELECT * FROM events e WHERE e.reminder_sent = false " +
             "AND e.reminder_minutes_before IS NOT NULL " +
             "AND e.event_date = :today AND e.event_time IS NOT NULL " +

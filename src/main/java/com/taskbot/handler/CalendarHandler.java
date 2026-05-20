@@ -37,7 +37,7 @@ public class CalendarHandler {
                 date, telegramId, eventService);
 
         String monthName = date.getMonth().getDisplayName(java.time.format.TextStyle.FULL, new Locale("ru"));
-        String text = String.format("📅 %s %d\n\nНажмите на дату для просмотра событий.\n【】 - сегодня\n• - есть события",
+        String text = String.format("📅 %s %d\n\nTap a date to view events.\n【】 - today\n• - has events",
                 monthName, date.getYear());
 
         sendMessage(telegramId, text, CalendarBuilder.buildCalendar(date, eventCounts, "CAL"));
@@ -58,6 +58,37 @@ public class CalendarHandler {
 
         if (data.startsWith("LIST_DELETE_")) {
             handleListDeletePrompt(telegramId, messageId, data);
+            return true;
+        }
+
+        if (data.equals("LIST_PAST")) {
+            showPastEvents(telegramId);
+            return true;
+        }
+
+        if (data.startsWith("LIST_PAST_PAGE_")) {
+            int page = Integer.parseInt(data.substring("LIST_PAST_PAGE_".length()));
+            showPastEvents(telegramId, page);
+            return true;
+        }
+
+        if (data.startsWith("LIST_PAST_DELETE_YES_")) {
+            handlePastDeleteConfirm(telegramId, messageId, data);
+            return true;
+        }
+
+        if (data.startsWith("LIST_PAST_DELETE_")) {
+            handlePastDeletePrompt(telegramId, messageId, data);
+            return true;
+        }
+
+        if (data.equals("LIST_PAST_CLEAR")) {
+            handleClearPastPrompt(telegramId, messageId);
+            return true;
+        }
+
+        if (data.equals("LIST_PAST_CLEAR_YES")) {
+            handleClearPastConfirm(telegramId, messageId);
             return true;
         }
 
@@ -111,7 +142,7 @@ public class CalendarHandler {
                 current, telegramId, eventService);
 
         String monthName = current.getMonth().getDisplayName(java.time.format.TextStyle.FULL, new Locale("ru"));
-        String text = String.format("📅 %s %d\n\nНажмите на дату для просмотра событий.\n【】 - сегодня\n• - есть события",
+        String text = String.format("📅 %s %d\n\nTap a date to view events.\n【】 - today\n• - has events",
                 monthName, current.getYear());
 
         editMessage(telegramId, messageId, text,
@@ -130,7 +161,7 @@ public class CalendarHandler {
         List<InlineKeyboardRow> rows = new ArrayList<>();
 
         if (events.isEmpty()) {
-            sb.append("📭 Нет событий на этот день.");
+            sb.append("📭 No events this day.");
         } else {
             for (EventDto e : events) {
                 String timeStr = e.getEventTime() != null ? " 🕐 " + e.getEventTime().format(
@@ -147,15 +178,15 @@ public class CalendarHandler {
 
         rows.add(new InlineKeyboardRow(
                 InlineKeyboardButton.builder()
-                        .text("➕ Создать")
+                        .text("➕ Create")
                         .callbackData("CAL_ADD")
                         .build(),
                 InlineKeyboardButton.builder()
-                        .text("📋 Список")
+                        .text("📋 List")
                         .callbackData("LIST_UPCOMING")
                         .build(),
                 InlineKeyboardButton.builder()
-                        .text("🏠 Старт")
+                        .text("🏠 Start")
                         .callbackData("MENU_MAIN")
                         .build()
         ));
@@ -185,14 +216,14 @@ public class CalendarHandler {
 
         List<InlineKeyboardRow> rows = new ArrayList<>();
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("🗑 Удалить").callbackData("EVT_DELETE_" + eventId).build()
+                InlineKeyboardButton.builder().text("🗑 Delete").callbackData("EVT_DELETE_" + eventId).build()
         ));
 
         String selDate = selectedDates.getOrDefault(telegramId, event.getEventDate().toString());
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("⬅️ Назад").callbackData("EVT_BACK_" + selDate).build(),
-                InlineKeyboardButton.builder().text("📋 Список").callbackData("LIST_UPCOMING").build(),
-                InlineKeyboardButton.builder().text("🏠 Старт").callbackData("MENU_MAIN").build()
+                InlineKeyboardButton.builder().text("⬅️ Back").callbackData("EVT_BACK_" + selDate).build(),
+                InlineKeyboardButton.builder().text("📋 List").callbackData("LIST_UPCOMING").build(),
+                InlineKeyboardButton.builder().text("🏠 Start").callbackData("MENU_MAIN").build()
         ));
 
         editMessage(telegramId, messageId, text,
@@ -216,12 +247,12 @@ public class CalendarHandler {
         List<EventDto> pageEvents = events.subList(from, to);
 
         StringBuilder sb = new StringBuilder();
-        sb.append("📋 Предстоящие события");
+        sb.append("📋 Upcoming events");
 
         if (events.isEmpty()) {
-            sb.append("\n\n📭 Нет предстоящих событий.");
+            sb.append("\n\n📭 No upcoming events.");
         } else {
-            sb.append(" (").append(from + 1).append("-").append(to).append(" из ").append(events.size()).append(")\n\n");
+            sb.append(" (").append(from + 1).append("-").append(to).append(" of ").append(events.size()).append(")\n\n");
             for (EventDto e : pageEvents) {
                 String timeStr = e.getEventTime() != null ? " 🕐 " + e.getEventTime().format(
                         DateTimeFormatter.ofPattern("HH:mm")) : "";
@@ -247,22 +278,143 @@ public class CalendarHandler {
 
         List<InlineKeyboardButton> navRow = new ArrayList<>();
         if (page > 0) {
-            navRow.add(InlineKeyboardButton.builder().text("⬅️ Назад").callbackData("LIST_PAGE_" + (page - 1)).build());
+            navRow.add(InlineKeyboardButton.builder().text("⬅️ Back").callbackData("LIST_PAGE_" + (page - 1)).build());
         }
-        navRow.add(InlineKeyboardButton.builder().text("🏠 Старт").callbackData("MENU_MAIN").build());
+        navRow.add(InlineKeyboardButton.builder().text("🏠 Start").callbackData("MENU_MAIN").build());
         if (page < totalPages - 1) {
-            navRow.add(InlineKeyboardButton.builder().text("➡️ Далее").callbackData("LIST_PAGE_" + (page + 1)).build());
+            navRow.add(InlineKeyboardButton.builder().text("➡️ Next").callbackData("LIST_PAGE_" + (page + 1)).build());
         }
         rows.add(new InlineKeyboardRow(navRow));
 
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("📂 Past events").callbackData("LIST_PAST").build()
+        ));
+
         sendMessage(telegramId, sb.toString(), InlineKeyboardMarkup.builder().keyboard(rows).build());
+    }
+
+    private void showPastEvents(Long telegramId) {
+        showPastEvents(telegramId, 0);
+    }
+
+    private void showPastEvents(Long telegramId, int page) {
+        List<EventDto> events = eventService.getPastEvents(telegramId);
+        int pageSize = 5;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("📂 Past events");
+
+        if (events.isEmpty()) {
+            sb.append("\n\n📭 No past events.");
+            List<InlineKeyboardRow> rows = new ArrayList<>();
+            rows.add(new InlineKeyboardRow(
+                    InlineKeyboardButton.builder().text("📋 Upcoming").callbackData("LIST_UPCOMING").build(),
+                    InlineKeyboardButton.builder().text("🏠 Start").callbackData("MENU_MAIN").build()
+            ));
+            sendMessage(telegramId, sb.toString(), InlineKeyboardMarkup.builder().keyboard(rows).build());
+            return;
+        }
+
+        int totalPages = Math.max(1, (int) Math.ceil((double) events.size() / pageSize));
+        if (page >= totalPages) page = totalPages - 1;
+        if (page < 0) page = 0;
+
+        int from = page * pageSize;
+        int to = Math.min(from + pageSize, events.size());
+        List<EventDto> pageEvents = events.subList(from, to);
+
+        sb.append(" (").append(from + 1).append("-").append(to).append(" of ").append(events.size()).append(")\n\n");
+        for (EventDto e : pageEvents) {
+            String timeStr = e.getEventTime() != null ? " 🕐 " + e.getEventTime().format(
+                    DateTimeFormatter.ofPattern("HH:mm")) : "";
+            sb.append(getColorEmoji(e.getColor())).append(" ")
+                    .append(e.getEventDate().format(DATE_FMT)).append(timeStr)
+                    .append("\n   ").append(e.getTitle()).append("\n");
+        }
+
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        for (EventDto e : pageEvents) {
+            rows.add(new InlineKeyboardRow(
+                    InlineKeyboardButton.builder()
+                            .text("👁 " + e.getTitle())
+                            .callbackData("EVT_VIEW_" + e.getId())
+                            .build(),
+                    InlineKeyboardButton.builder()
+                            .text("🗑")
+                            .callbackData("LIST_PAST_DELETE_" + e.getId())
+                            .build()
+            ));
+        }
+
+        List<InlineKeyboardButton> navRow = new ArrayList<>();
+        if (page > 0) {
+            navRow.add(InlineKeyboardButton.builder().text("⬅️ Back").callbackData("LIST_PAST_PAGE_" + (page - 1)).build());
+        }
+        navRow.add(InlineKeyboardButton.builder().text("📋 Upcoming").callbackData("LIST_UPCOMING").build());
+        if (page < totalPages - 1) {
+            navRow.add(InlineKeyboardButton.builder().text("➡️ Next").callbackData("LIST_PAST_PAGE_" + (page + 1)).build());
+        }
+        rows.add(new InlineKeyboardRow(navRow));
+
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("🗑 Clear all past").callbackData("LIST_PAST_CLEAR").build(),
+                InlineKeyboardButton.builder().text("🏠 Start").callbackData("MENU_MAIN").build()
+        ));
+
+        sendMessage(telegramId, sb.toString(), InlineKeyboardMarkup.builder().keyboard(rows).build());
+    }
+
+    private void handlePastDeletePrompt(Long telegramId, Integer messageId, String data) {
+        Long eventId = Long.parseLong(data.substring("LIST_PAST_DELETE_".length()));
+        EventDto event = eventService.getEvent(eventId, telegramId);
+
+        DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern("HH:mm");
+        String timeStr = event.getEventTime() != null ? " 🕐 " + event.getEventTime().format(timeFmt) : "";
+        String text = String.format("🗑 Delete event?\n\n%s %s\n📅 %s%s",
+                getColorEmoji(event.getColor()), event.getTitle(),
+                event.getEventDate().format(DATE_FMT), timeStr);
+
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("✅ Yes, delete").callbackData("LIST_PAST_DELETE_YES_" + eventId).build(),
+                InlineKeyboardButton.builder().text("❌ Cancel").callbackData("LIST_PAST").build()
+        ));
+
+        editMessage(telegramId, messageId, text, InlineKeyboardMarkup.builder().keyboard(rows).build());
+    }
+
+    private void handlePastDeleteConfirm(Long telegramId, Integer messageId, String data) {
+        Long eventId = Long.parseLong(data.substring("LIST_PAST_DELETE_YES_".length()));
+        EventDto event = eventService.getEvent(eventId, telegramId);
+        eventService.deleteEvent(eventId, telegramId);
+        sendMessage(telegramId, "🗑 Deleted: " + event.getTitle(), null);
+        showPastEvents(telegramId);
+    }
+
+    private void handleClearPastPrompt(Long telegramId, Integer messageId) {
+        int count = eventService.getPastEvents(telegramId).size();
+        String text = String.format("⚠️ Clear ALL past events?\n\n%d past event(s) will be permanently deleted.\n\nThis cannot be undone!", count);
+
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("✅ Yes, clear all").callbackData("LIST_PAST_CLEAR_YES").build(),
+                InlineKeyboardButton.builder().text("❌ Cancel").callbackData("LIST_PAST").build()
+        ));
+
+        editMessage(telegramId, messageId, text, InlineKeyboardMarkup.builder().keyboard(rows).build());
+    }
+
+    private void handleClearPastConfirm(Long telegramId, Integer messageId) {
+        int count = eventService.deleteAllPastEvents(telegramId);
+        sendMessage(telegramId, String.format("🗑 Cleared %d past event(s).", count), null);
+        showPastEvents(telegramId);
     }
 
     private void handleEventDelete(Long telegramId, Integer messageId, String data) {
         Long eventId = Long.parseLong(data.substring("EVT_DELETE_".length()));
         EventDto event = eventService.getEvent(eventId, telegramId);
         eventService.deleteEvent(eventId, telegramId);
-        sendMessage(telegramId, "🗑 Удалено: " + event.getTitle(), null);
+        sendMessage(telegramId, "🗑 Deleted: " + event.getTitle(), null);
         calendarDates.remove(telegramId);
         showCalendar(telegramId, LocalDate.now());
     }
@@ -273,14 +425,14 @@ public class CalendarHandler {
 
         DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern("HH:mm");
         String timeStr = event.getEventTime() != null ? " 🕐 " + event.getEventTime().format(timeFmt) : "";
-        String text = String.format("🗑 Удалить событие?\n\n%s %s\n📅 %s%s",
+        String text = String.format("🗑 Delete event?\n\n%s %s\n📅 %s%s",
                 getColorEmoji(event.getColor()), event.getTitle(),
                 event.getEventDate().format(DATE_FMT), timeStr);
 
         List<InlineKeyboardRow> rows = new ArrayList<>();
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("✅ Да, удалить").callbackData("LIST_DELETE_YES_" + eventId).build(),
-                InlineKeyboardButton.builder().text("❌ Отмена").callbackData("LIST_UPCOMING").build()
+                InlineKeyboardButton.builder().text("✅ Yes, delete").callbackData("LIST_DELETE_YES_" + eventId).build(),
+                InlineKeyboardButton.builder().text("❌ Cancel").callbackData("LIST_UPCOMING").build()
         ));
 
         editMessage(telegramId, messageId, text, InlineKeyboardMarkup.builder().keyboard(rows).build());
@@ -290,7 +442,7 @@ public class CalendarHandler {
         Long eventId = Long.parseLong(data.substring("LIST_DELETE_YES_".length()));
         EventDto event = eventService.getEvent(eventId, telegramId);
         eventService.deleteEvent(eventId, telegramId);
-        sendMessage(telegramId, "🗑 Удалено: " + event.getTitle(), null);
+        sendMessage(telegramId, "🗑 Deleted: " + event.getTitle(), null);
         showUpcomingEvents(telegramId);
     }
 
