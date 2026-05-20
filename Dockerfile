@@ -1,12 +1,13 @@
 FROM eclipse-temurin:21-jdk-alpine AS builder
 
+RUN apk add --no-cache maven
+
 WORKDIR /app
-COPY pom.xml mvnw ./
-COPY .mvn .mvn
-RUN --mount=type=cache,target=/root/.m2 ./mvnw dependency:go-offline -B
+COPY pom.xml ./
+RUN mvn dependency:go-offline -B -q
 
 COPY src src
-RUN --mount=type=cache,target=/root/.m2 ./mvnw package -DskipTests -B
+RUN mvn package -DskipTests -B -q
 
 FROM eclipse-temurin:21-jre-alpine AS runtime
 
