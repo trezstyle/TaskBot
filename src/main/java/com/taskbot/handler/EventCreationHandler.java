@@ -355,15 +355,24 @@ String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
 
     private void editMessage(Long chatId, Integer messageId, String text, InlineKeyboardMarkup keyboard) {
         try {
-            var msg = EditMessageText.builder()
-                    .chatId(chatId)
-                    .messageId(messageId)
-                    .text(text)
-                    .replyMarkup(keyboard)
-                    .build();
-            telegramClient.execute(msg);
+            if (messageId == null) {
+                var msg = SendMessage.builder()
+                        .chatId(chatId)
+                        .text(text)
+                        .replyMarkup(keyboard)
+                        .build();
+                telegramClient.execute(msg);
+            } else {
+                var msg = EditMessageText.builder()
+                        .chatId(chatId)
+                        .messageId(messageId)
+                        .text(text)
+                        .replyMarkup(keyboard)
+                        .build();
+                telegramClient.execute(msg);
+            }
         } catch (TelegramApiException e) {
-            log.error("Failed to edit message {}: {}", messageId, e.getMessage());
+            log.error("Failed to edit/send message: {}", e.getMessage());
         }
     }
 }
