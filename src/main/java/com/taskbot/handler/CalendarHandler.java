@@ -36,7 +36,7 @@ public class CalendarHandler {
         Map<LocalDate, Integer> eventCounts = CalendarBuilder.countEventsForUser(
                 date, telegramId, eventService);
 
-        String monthName = date.getMonth().getDisplayName(java.time.format.TextStyle.FULL, new Locale("ru"));
+        String monthName = date.getMonth().getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH);
         String text = String.format("📅 %s %d\n\nTap a date to view events.\n【】 - today\n🟢 - free  🟡 - events  🔴 - 5+",
                 monthName, date.getYear());
 
@@ -141,7 +141,7 @@ public class CalendarHandler {
         Map<LocalDate, Integer> eventCounts = CalendarBuilder.countEventsForUser(
                 current, telegramId, eventService);
 
-        String monthName = current.getMonth().getDisplayName(java.time.format.TextStyle.FULL, new Locale("ru"));
+        String monthName = current.getMonth().getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH);
         String text = String.format("📅 %s %d\n\nTap a date to view events.\n【】 - today\n🟢 - free  🟡 - events  🔴 - 5+",
                 monthName, current.getYear());
 
@@ -203,7 +203,7 @@ public class CalendarHandler {
         String timeStr = event.getEventTime() != null ? " 🕐 " + event.getEventTime().format(timeFmt) : "";
         String reminderStr = event.getReminderMinutesBefore() != null && event.getReminderMinutesBefore() > 0
                 ? formatReminder(event.getReminderMinutesBefore())
-                : "Без напоминания";
+                : "No reminder";
 
         String text = String.format("%s %s\n\n📅 %s%s\n🎨 %s\n🔔 %s\n\n📝 %s",
                 getColorEmoji(event.getColor()),
@@ -212,7 +212,7 @@ public class CalendarHandler {
                 timeStr,
                 getColorName(event.getColor()),
                 reminderStr,
-                event.getDescription() != null ? event.getDescription() : "Без описания");
+                event.getDescription() != null ? event.getDescription() : "No description");
 
         List<InlineKeyboardRow> rows = new ArrayList<>();
         rows.add(new InlineKeyboardRow(
@@ -465,19 +465,19 @@ public class CalendarHandler {
 
     private String getColorName(String color) {
         return switch (color) {
-            case "RED" -> "Красный";
-            case "GREEN" -> "Зелёный";
-            case "YELLOW" -> "Жёлтый";
-            case "PURPLE" -> "Фиолетовый";
-            case "ORANGE" -> "Оранжевый";
-            default -> "Синий";
+            case "RED" -> "Red";
+            case "GREEN" -> "Green";
+            case "YELLOW" -> "Yellow";
+            case "PURPLE" -> "Purple";
+            case "ORANGE" -> "Orange";
+            default -> "Blue";
         };
     }
 
     private String formatReminder(int minutes) {
-        if (minutes >= 1440) return (minutes / 1440) + " дн. до";
-        if (minutes >= 60) return (minutes / 60) + " ч. до";
-        return minutes + " мин. до";
+        if (minutes >= 1440) return (minutes / 1440) + "d before";
+        if (minutes >= 60) return (minutes / 60) + "h before";
+        return minutes + "m before";
     }
 
     private void sendMessage(Long chatId, String text, InlineKeyboardMarkup keyboard) {

@@ -30,9 +30,9 @@ public class SchedulerService {
                 User user = event.getUser();
                 if (Boolean.TRUE.equals(user.getNotificationsEnabled())) {
                     String timeStr = event.getEventTime() != null
-                            ? " в " + event.getEventTime()
+                            ? " at " + event.getEventTime()
                             : "";
-                    String msg = String.format("🔔 Напоминание: %s%s", event.getTitle(), timeStr);
+                    String msg = String.format("🔔 Reminder: %s%s", event.getTitle(), timeStr);
                     telegramBotService.sendNotification(user.getTelegramId(), msg);
                 }
                 eventService.markReminderSent(event.getId());
@@ -58,12 +58,12 @@ public class SchedulerService {
                 List<com.taskbot.dto.EventDto> upcoming = eventService.getUpcomingEvents(telegramId);
 
                 StringBuilder sb = new StringBuilder();
-                sb.append("☀️ Доброе утро! Сводка на ").append(today).append(":\n\n");
+                sb.append("☀️ Good morning! Summary for ").append(today).append(":\n\n");
 
                 if (todayEvents.isEmpty()) {
-                    sb.append("✅ На сегодня событий нет.");
+                    sb.append("✅ No events today.");
                 } else {
-                    sb.append("📅 Сегодня (").append(todayEvents.size()).append("):\n");
+                    sb.append("📅 Today (").append(todayEvents.size()).append("):\n");
                     for (com.taskbot.dto.EventDto e : todayEvents) {
                         String timeStr = e.getEventTime() != null ? " 🕐 " + e.getEventTime() : "";
                         sb.append("  • ").append(e.getTitle()).append(timeStr).append("\n");
@@ -71,7 +71,7 @@ public class SchedulerService {
                 }
 
                 if (!upcoming.isEmpty()) {
-                    sb.append("\n📌 Ближайшие:\n");
+                    sb.append("\n📌 Upcoming:\n");
                     upcoming.stream().limit(3).forEach(e ->
                             sb.append("  • ").append(e.getTitle())
                                     .append(" (").append(e.getEventDate()).append(")\n"));

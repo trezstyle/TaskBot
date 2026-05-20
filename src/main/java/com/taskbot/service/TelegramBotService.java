@@ -51,38 +51,37 @@ public class TelegramBotService {
             }
         } catch (com.taskbot.exception.RateLimitExceededException e) {
             Long tgId = update.hasMessage() ? update.getMessage().getFrom().getId() : update.getCallbackQuery().getFrom().getId();
-            sendMessage(tgId, "\u26a0\ufe0f Слишком много запросов. Подождите немного.", null);
+            sendMessage(tgId, "\u26a0\ufe0f Too many requests. Please wait.", null);
         } catch (Exception e) {
             log.error("Error processing update", e);
             Long tgId = update.hasMessage() ? update.getMessage().getFrom().getId() : update.getCallbackQuery().getFrom().getId();
-            sendMessage(tgId, "\u274c Произошла ошибка. Попробуйте ещё раз.", null);
+            sendMessage(tgId, "\u274c An error occurred. Please try again.", null);
         }
     }
 
     private void processMessage(Message message) {
         Long telegramId = message.getFrom().getId();
-        String text = message.getText().trim();
+        String text = message.getText() != null ? message.getText().trim() : "";
+        log.info("Message from {}: '{}'", telegramId, text.length() > 50 ? text.substring(0, 50) : text);
+
+        // Commands always work, even in creation flow
+        if ("/start".equals(text) || "/cancel".equals(text)) {
+            if (creationHandler.isInCreationFlow(telegramId)) {
+                creationHandler.cancelCreation(telegramId);
+            }
+            if ("/cancel".equals(text)) {
+                sendMessage(telegramId, "❌ Cancelled.", null);
+            }
+            calendarHandler.showCalendar(telegramId, LocalDate.now());
+            return;
+        }
 
         if (creationHandler.isInCreationFlow(telegramId)) {
-            if ("/cancel".equals(text)) {
-                creationHandler.cancelCreation(telegramId);
-                sendMessage(telegramId, "❌ Cancelled.", null);
-                calendarHandler.showCalendar(telegramId, LocalDate.now());
-                return;
-            }
             creationHandler.handleTextInput(telegramId, message.getMessageId(), text);
             return;
         }
 
-        if ("/cancel".equals(text)) {
-            creationHandler.cancelCreation(telegramId);
-            sendMessage(telegramId, "❌ Cancelled.", null);
-            return;
-        }
-
-        if ("/start".equals(text)) {
-            calendarHandler.showCalendar(telegramId, LocalDate.now());
-        } else if ("/create".equals(text)) {
+        if ("/create".equals(text)) {
             creationHandler.startCreateEvent(telegramId, null);
         } else if ("/list".equals(text)) {
             calendarHandler.handleCallback(telegramId, null, "LIST_UPCOMING");

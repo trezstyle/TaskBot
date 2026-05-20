@@ -104,7 +104,7 @@ public class EventCreationHandler {
                 ? LocalDate.parse(temp.get("calendarDate"))
                 : LocalDate.parse(temp.getOrDefault("selectedDate", LocalDate.now().toString()));
 
-        String monthName = date.getMonth().getDisplayName(java.time.format.TextStyle.FULL, new java.util.Locale("ru"));
+        String monthName = date.getMonth().getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH);
 String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
                 monthName, date.getYear());
 
@@ -294,7 +294,7 @@ String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
 
         LocalDate date = LocalDate.parse(temp.get("selectedDate"));
         LocalTime time = temp.containsKey("selectedTime") ? LocalTime.parse(temp.get("selectedTime")) : null;
-        String title = temp.getOrDefault("title", "Без названия");
+        String title = temp.getOrDefault("title", "Untitled");
 
         EventDto event = eventService.createEvent(telegramId,
                 title, null, date, time, "BLUE", null);

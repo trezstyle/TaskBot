@@ -13,7 +13,7 @@ import java.util.*;
 
 public class CalendarBuilder {
 
-    private static final String[] DAY_HEADERS = {"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"};
+    private static final String[] DAY_HEADERS = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
 
     public static Map<LocalDate, Integer> countEventsForUser(LocalDate monthDate, Long telegramId, EventService eventService) {
         LocalDate start = monthDate.withDayOfMonth(1);
@@ -33,7 +33,7 @@ public class CalendarBuilder {
 
         YearMonth month = YearMonth.from(currentDate);
         String header = String.format("📅 %s %d",
-                month.getMonth().getDisplayName(TextStyle.FULL, new Locale("ru")),
+                month.getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH),
                 month.getYear());
 
         rows.add(new InlineKeyboardRow(
@@ -110,7 +110,7 @@ for (int day = 1; day <= daysInMonth; day++) {
         List<InlineKeyboardRow> rows = new ArrayList<>();
 
         InlineKeyboardRow hourHeader = new InlineKeyboardRow();
-        hourHeader.add(InlineKeyboardButton.builder().text("🕐 Час:").callbackData("NONE").build());
+        hourHeader.add(InlineKeyboardButton.builder().text("🕐 Hour:").callbackData("NONE").build());
         rows.add(hourHeader);
 
         InlineKeyboardRow hourRow1 = new InlineKeyboardRow();
@@ -128,7 +128,7 @@ for (int day = 1; day <= daysInMonth; day++) {
         rows.add(hourRow2);
 
         InlineKeyboardRow minuteHeader = new InlineKeyboardRow();
-        minuteHeader.add(InlineKeyboardButton.builder().text("⏱ Минуты:").callbackData("NONE").build());
+        minuteHeader.add(InlineKeyboardButton.builder().text("⏱ Minutes:").callbackData("NONE").build());
         rows.add(minuteHeader);
 
         InlineKeyboardRow minuteRow = new InlineKeyboardRow();
@@ -141,7 +141,7 @@ for (int day = 1; day <= daysInMonth; day++) {
         rows.add(minuteRow);
 
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("⬅️ Назад").callbackData("MENU_MAIN").build()
+                InlineKeyboardButton.builder().text("⬅️ Back").callbackData("MENU_MAIN").build()
         ));
 
         return InlineKeyboardMarkup.builder().keyboard(rows).build();
@@ -151,15 +151,15 @@ for (int day = 1; day <= daysInMonth; day++) {
         List<InlineKeyboardRow> rows = new ArrayList<>();
 
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("🔵 Синий").callbackData(callbackPrefix + "_BLUE").build(),
-                InlineKeyboardButton.builder().text("🔴 Красный").callbackData(callbackPrefix + "_RED").build(),
-                InlineKeyboardButton.builder().text("🟢 Зелёный").callbackData(callbackPrefix + "_GREEN").build()
+                InlineKeyboardButton.builder().text("🔵 Blue").callbackData(callbackPrefix + "_BLUE").build(),
+                InlineKeyboardButton.builder().text("🔴 Red").callbackData(callbackPrefix + "_RED").build(),
+                InlineKeyboardButton.builder().text("🟢 Green").callbackData(callbackPrefix + "_GREEN").build()
         ));
 
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("🟡 Жёлтый").callbackData(callbackPrefix + "_YELLOW").build(),
-                InlineKeyboardButton.builder().text("🟣 Фиолет").callbackData(callbackPrefix + "_PURPLE").build(),
-                InlineKeyboardButton.builder().text("🟠 Оранж").callbackData(callbackPrefix + "_ORANGE").build()
+                InlineKeyboardButton.builder().text("🟡 Yellow").callbackData(callbackPrefix + "_YELLOW").build(),
+                InlineKeyboardButton.builder().text("🟣 Purple").callbackData(callbackPrefix + "_PURPLE").build(),
+                InlineKeyboardButton.builder().text("🟠 Orange").callbackData(callbackPrefix + "_ORANGE").build()
         ));
 
         return InlineKeyboardMarkup.builder().keyboard(rows).build();
@@ -169,17 +169,17 @@ for (int day = 1; day <= daysInMonth; day++) {
         List<InlineKeyboardRow> rows = new ArrayList<>();
 
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("Без напоминания").callbackData(callbackPrefix + "_0").build()
+                InlineKeyboardButton.builder().text("No reminder").callbackData(callbackPrefix + "_0").build()
         ));
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("5 мин").callbackData(callbackPrefix + "_5").build(),
-                InlineKeyboardButton.builder().text("15 мин").callbackData(callbackPrefix + "_15").build(),
-                InlineKeyboardButton.builder().text("30 мин").callbackData(callbackPrefix + "_30").build()
+                InlineKeyboardButton.builder().text("5m").callbackData(callbackPrefix + "_5").build(),
+                InlineKeyboardButton.builder().text("15m").callbackData(callbackPrefix + "_15").build(),
+                InlineKeyboardButton.builder().text("30m").callbackData(callbackPrefix + "_30").build()
         ));
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("1 час").callbackData(callbackPrefix + "_60").build(),
-                InlineKeyboardButton.builder().text("2 часа").callbackData(callbackPrefix + "_120").build(),
-                InlineKeyboardButton.builder().text("1 день").callbackData(callbackPrefix + "_1440").build()
+                InlineKeyboardButton.builder().text("1h").callbackData(callbackPrefix + "_60").build(),
+                InlineKeyboardButton.builder().text("2h").callbackData(callbackPrefix + "_120").build(),
+                InlineKeyboardButton.builder().text("1d").callbackData(callbackPrefix + "_1440").build()
         ));
 
         return InlineKeyboardMarkup.builder().keyboard(rows).build();
