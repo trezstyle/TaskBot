@@ -58,13 +58,18 @@ public class CalendarBuilder {
             weekRow.add(InlineKeyboardButton.builder().text(" ").callbackData("NONE").build());
         }
 
-        for (int day = 1; day <= daysInMonth; day++) {
+for (int day = 1; day <= daysInMonth; day++) {
             LocalDate date = firstDay.withDayOfMonth(day);
             int count = eventCounts.getOrDefault(date, 0);
-            String label = count > 0 ? day + " \u2b50" : String.valueOf(day);
+            String label;
+            if (count > 0) {
+                label = "•" + day + "•";
+            } else {
+                label = String.valueOf(day);
+            }
 
             if (date.equals(LocalDate.now())) {
-                label = "【" + label + "】";
+                label = "【" + day + "】";
             }
 
             weekRow.add(InlineKeyboardButton.builder()

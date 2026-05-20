@@ -37,7 +37,7 @@ public class CalendarHandler {
                 date, telegramId, eventService);
 
         String monthName = date.getMonth().getDisplayName(java.time.format.TextStyle.FULL, new Locale("ru"));
-        String text = String.format("📅 %s %d\n\nTap a date to view events.\n【】 - today\n⭐ - has events",
+        String text = String.format("📅 %s %d\n\nTap a date to view events.\n【】 - today\n•5• - has events",
                 monthName, date.getYear());
 
         sendMessage(telegramId, text, CalendarBuilder.buildCalendar(date, eventCounts, "CAL"));
@@ -142,7 +142,7 @@ public class CalendarHandler {
                 current, telegramId, eventService);
 
         String monthName = current.getMonth().getDisplayName(java.time.format.TextStyle.FULL, new Locale("ru"));
-        String text = String.format("📅 %s %d\n\nTap a date to view events.\n【】 - today\n⭐ - has events",
+        String text = String.format("📅 %s %d\n\nTap a date to view events.\n【】 - today\n•5• - has events",
                 monthName, current.getYear());
 
         editMessage(telegramId, messageId, text,
