@@ -24,6 +24,7 @@ public class BotCommandRegistrar {
             SetMyCommands setCommands = SetMyCommands.builder()
                     .commands(List.of(
                             new BotCommand("start", "📅 Calendar"),
+                            new BotCommand("create", "➕ Create event"),
                             new BotCommand("list", "📋 Event list"),
                             new BotCommand("cancel", "❌ Cancel action"),
                             new BotCommand("help", "📖 Help")

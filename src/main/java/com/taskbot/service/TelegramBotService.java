@@ -82,6 +82,11 @@ public class TelegramBotService {
 
         if ("/start".equals(text)) {
             calendarHandler.showCalendar(telegramId, LocalDate.now());
+        } else if ("/create".equals(text)) {
+            Integer msgId = sendMessageWithId(telegramId, "➕ Creating event...");
+            if (msgId != null) {
+                creationHandler.startCreateEvent(telegramId, msgId);
+            }
         } else if ("/list".equals(text)) {
             calendarHandler.handleCallback(telegramId, null, "LIST_UPCOMING");
         } else if ("/help".equals(text)) {
@@ -89,6 +94,7 @@ public class TelegramBotService {
                     📖 Available commands:
                     
                     /start - Calendar
+                    /create - Create event
                     /list - Event list
                     /cancel - Cancel action
                     /help - This help
@@ -207,6 +213,20 @@ public class TelegramBotService {
             telegramClient.execute(msg);
         } catch (TelegramApiException e) {
             log.error("Failed to send message to chat: {}", chatId, e);
+        }
+    }
+
+    private Integer sendMessageWithId(Long chatId, String text) {
+        try {
+            SendMessage msg = SendMessage.builder()
+                    .chatId(chatId)
+                    .text(text)
+                    .build();
+            var sent = telegramClient.execute(msg);
+            return sent.getMessageId();
+        } catch (TelegramApiException e) {
+            log.error("Failed to send message to chat: {}", chatId, e);
+            return null;
         }
     }
 }
