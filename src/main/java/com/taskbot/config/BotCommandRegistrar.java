@@ -7,7 +7,6 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
-import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeAllPrivateChats;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.util.List;
@@ -23,8 +22,6 @@ public class BotCommandRegistrar {
     public void registerCommands() {
         try {
             SetMyCommands setCommands = SetMyCommands.builder()
-                    .scope(new BotCommandScopeAllPrivateChats())
-                    .languageCode("ru")
                     .commands(List.of(
                             new BotCommand("start", "📅 Календарь"),
                             new BotCommand("list", "📋 Список событий"),
