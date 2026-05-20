@@ -3,6 +3,7 @@ package com.taskbot.service;
 import com.taskbot.handler.CalendarHandler;
 import com.taskbot.handler.EventCreationHandler;
 import com.taskbot.security.RateLimitingService;
+import com.taskbot.service.SpeechToTextService;
 import com.taskbot.util.CalendarBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +12,7 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
+import org.telegram.telegrambots.meta.api.objects.Voice;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
@@ -26,6 +28,7 @@ public class TelegramBotService {
     private final RateLimitingService rateLimitingService;
     private final CalendarHandler calendarHandler;
     private final EventCreationHandler creationHandler;
+    private final SpeechToTextService speechToTextService;
 
     public void processUpdate(Update update) {
         try {
@@ -35,11 +38,16 @@ public class TelegramBotService {
                 rateLimitingService.checkLimit(telegramId);
                 ensureUserExistsFromCallback(update.getCallbackQuery());
                 processCallbackQuery(update.getCallbackQuery());
-            } else if (update.hasMessage() && update.getMessage().hasText()) {
+            } else if (update.hasMessage()) {
                 telegramId = update.getMessage().getFrom().getId();
                 rateLimitingService.checkLimit(telegramId);
                 ensureUserExistsFromMessage(update.getMessage());
-                processMessage(update.getMessage());
+
+                if (update.getMessage().hasVoice()) {
+                    processVoiceMessage(update.getMessage());
+                } else if (update.getMessage().hasText()) {
+                    processMessage(update.getMessage());
+                }
             }
         } catch (com.taskbot.exception.RateLimitExceededException e) {
             Long tgId = update.hasMessage() ? update.getMessage().getFrom().getId() : update.getCallbackQuery().getFrom().getId();
@@ -90,6 +98,35 @@ public class TelegramBotService {
                     """, null);
         } else {
             sendMessage(telegramId, "\ud83e\udd14 Используйте /start для календаря.", null);
+        }
+    }
+
+    private void processVoiceMessage(Message message) {
+        Long telegramId = message.getFrom().getId();
+        Voice voice = message.getVoice();
+
+        if (creationHandler.isInCreationFlow(telegramId)) {
+            // User is in event creation flow - transcribe voice as title
+            sendMessage(telegramId, "🎙 Распознаю голос...", null);
+            String text = speechToTextService.transcribeVoice(voice.getFileId(), telegramClient);
+
+            if (text != null && !text.isBlank()) {
+                sendMessage(telegramId, "📝 Распознано: " + text, null);
+                creationHandler.handleTextInput(telegramId, message.getMessageId(), text);
+            } else {
+                sendMessage(telegramId, "🎙 Не удалось распознать. Введите название текстом:", null);
+            }
+        } else {
+            // Not in creation flow - start quick event from voice
+            sendMessage(telegramId, "🎙 Распознаю голос...", null);
+            String text = speechToTextService.transcribeVoice(voice.getFileId(), telegramClient);
+
+            if (text != null && !text.isBlank()) {
+                creationHandler.startQuickEventFromVoice(telegramId, text);
+                sendMessage(telegramId, "📝 Распознано: " + text + "\n\nВыберите дату и время:", null);
+            } else {
+                sendMessage(telegramId, "🎙 Не удалось распознать голос. Попробуйте ещё раз или используйте /start", null);
+            }
         }
     }
 

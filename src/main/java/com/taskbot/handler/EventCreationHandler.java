@@ -45,6 +45,19 @@ public class EventCreationHandler {
         tempData.remove(telegramId);
     }
 
+    /**
+     * Start quick event creation from a voice message.
+     * Pre-fills the title and puts user in date-selection state.
+     */
+    public void startQuickEventFromVoice(Long telegramId, String title) {
+        Map<String, String> temp = getTemp(telegramId);
+        temp.put("selectedDate", LocalDate.now().toString());
+        temp.put("title", title);
+        states.put(telegramId, STATE_DATE);
+        // The user will see calendar from CalendarHandler.showCalendar
+        // called after this method in TelegramBotService
+    }
+
     public void startCreateEvent(Long telegramId, Integer messageId) {
         Map<String, String> temp = getTemp(telegramId);
         temp.put("selectedDate", LocalDate.now().toString());
