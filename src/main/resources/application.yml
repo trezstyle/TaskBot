@@ -92,8 +92,8 @@ encryption:
   secret-key: ${ENCRYPTION_SECRET_KEY}
 
 rate-limiting:
-  capacity: ${RATE_LIMIT_CAPACITY:10}
-  refill-per-minute: ${RATE_LIMIT_REFILL_PER_MINUTE:5}
+  capacity: ${RATE_LIMIT_CAPACITY:30}
+  refill-per-minute: ${RATE_LIMIT_REFILL_PER_MINUTE:20}
 
 admin:
   telegram-ids: ${ADMIN_TELEGRAM_IDS:}
