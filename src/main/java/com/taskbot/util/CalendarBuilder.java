@@ -62,14 +62,14 @@ for (int day = 1; day <= daysInMonth; day++) {
             LocalDate date = firstDay.withDayOfMonth(day);
             int count = eventCounts.getOrDefault(date, 0);
             String label;
-            if (count > 0) {
-                label = "•" + day + "•";
-            } else {
-                label = String.valueOf(day);
-            }
-
             if (date.equals(LocalDate.now())) {
                 label = "【" + day + "】";
+            } else if (count >= 5) {
+                label = "🔴" + day;
+            } else if (count > 0) {
+                label = "🟡" + day;
+            } else {
+                label = "🟢" + day;
             }
 
             weekRow.add(InlineKeyboardButton.builder()
