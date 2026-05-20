@@ -1,5 +1,7 @@
 package com.taskbot.util;
 
+import com.taskbot.dto.EventDto;
+import com.taskbot.service.EventService;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
@@ -12,6 +14,17 @@ import java.util.*;
 public class CalendarBuilder {
 
     private static final String[] DAY_HEADERS = {"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"};
+
+    public static Map<LocalDate, Integer> countEventsForUser(LocalDate monthDate, Long telegramId, EventService eventService) {
+        LocalDate start = monthDate.withDayOfMonth(1);
+        LocalDate end = monthDate.withDayOfMonth(monthDate.lengthOfMonth());
+        List<EventDto> events = eventService.getEventsInRange(telegramId, start, end);
+        Map<LocalDate, Integer> counts = new HashMap<>();
+        for (EventDto e : events) {
+            counts.merge(e.getEventDate(), 1, Integer::sum);
+        }
+        return counts;
+    }
 
     public static InlineKeyboardMarkup buildCalendar(LocalDate currentDate,
                                                       Map<LocalDate, Integer> eventCounts,
