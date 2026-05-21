@@ -5,7 +5,7 @@ spring:
   datasource:
     url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/taskbot}
     username: ${POSTGRES_USER:taskbot}
-    password: ${POSTGRES_PASSWORD:changeme}
+    password: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -97,3 +97,6 @@ rate-limiting:
 
 admin:
   telegram-ids: ${ADMIN_TELEGRAM_IDS:}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:https://your-domain.com}
