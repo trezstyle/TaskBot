@@ -84,11 +84,20 @@ public class SpeechToTextService {
 
             // 4. Run Vosk transcription
             ProcessBuilder voskPb = new ProcessBuilder(PYTHON_BIN, VOSK_SCRIPT, wavFile.toString());
+            voskPb.redirectErrorStream(false);
             Process voskProc = voskPb.start();
-            // Read stdout (transcription) first, then stderr separately to avoid mixing
-            String result = new String(voskProc.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+
+            // Read stdout and stderr in parallel to avoid deadlock
+            java.io.InputStream stdout = voskProc.getInputStream();
+            java.io.InputStream stderr = voskProc.getErrorStream();
+            java.util.concurrent.Future<String> resultFuture = java.util.concurrent.Executors.newSingleThreadExecutor().submit(
+                    () -> new String(stdout.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim());
+            java.util.concurrent.Future<String> errorFuture = java.util.concurrent.Executors.newSingleThreadExecutor().submit(
+                    () -> new String(stderr.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim());
+
             boolean voskOk = voskProc.waitFor(60, TimeUnit.SECONDS);
-            String errors = new String(voskProc.getErrorStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+            String result = resultFuture.get(10, TimeUnit.SECONDS);
+            String errors = errorFuture.get(10, TimeUnit.SECONDS);
 
             if (!voskOk || voskProc.exitValue() != 0) {
                 log.error("Vosk failed: exit={}, result={}, errors={}", voskProc.exitValue(), result, errors);

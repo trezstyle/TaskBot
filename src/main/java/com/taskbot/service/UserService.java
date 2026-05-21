@@ -27,8 +27,8 @@ public class UserService {
                             .username(username != null ? username : String.valueOf(telegramId))
                             .firstName(firstName)
                             .lastName(lastName)
-                            .languageCode("ru")
-                            .timezone("Europe/Moscow")
+                            .languageCode("en")
+                            .timezone("Europe/Berlin")
                             .notificationsEnabled(true)
                             .build();
                     User saved = userRepository.save(newUser);

@@ -50,12 +50,16 @@ public class TelegramBotService {
                 }
             }
         } catch (com.taskbot.exception.RateLimitExceededException e) {
-            Long tgId = update.hasMessage() ? update.getMessage().getFrom().getId() : update.getCallbackQuery().getFrom().getId();
-            sendMessage(tgId, "\u26a0\ufe0f Too many requests. Please wait.", null);
+            Long tgId = extractTelegramId(update);
+            if (tgId != null) {
+                sendMessage(tgId, "\u26a0\ufe0f Too many requests. Please wait.", null);
+            }
         } catch (Exception e) {
             log.error("Error processing update", e);
-            Long tgId = update.hasMessage() ? update.getMessage().getFrom().getId() : update.getCallbackQuery().getFrom().getId();
-            sendMessage(tgId, "\u274c An error occurred. Please try again.", null);
+            Long tgId = extractTelegramId(update);
+            if (tgId != null) {
+                sendMessage(tgId, "\u274c An error occurred. Please try again.", null);
+            }
         }
     }
 
@@ -126,6 +130,7 @@ public class TelegramBotService {
             if (text != null && !text.isBlank()) {
                 creationHandler.startQuickEventFromVoice(telegramId, text);
                 sendMessage(telegramId, "📝 Recognized: " + text + "\n\nSelect date and time:", null);
+                calendarHandler.showCalendar(telegramId, LocalDate.now());
             } else {
                 sendMessage(telegramId, "🎙 Could not recognize. Try again or use /start", null);
             }
@@ -136,6 +141,17 @@ public class TelegramBotService {
         Long telegramId = callbackQuery.getFrom().getId();
         String data = callbackQuery.getData();
         Integer messageId = callbackQuery.getMessage().getMessageId();
+
+        if (data.equals("NONE")) {
+            // Dummy button — just answer the callback to remove the loading spinner
+            try {
+                telegramClient.execute(new org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery(
+                        callbackQuery.getId()));
+            } catch (TelegramApiException e) {
+                log.debug("Failed to answer NONE callback", e);
+            }
+            return;
+        }
 
         if (creationHandler.isInCreationFlow(telegramId) && data.startsWith("CREATE_")) {
             creationHandler.handleCallback(telegramId, messageId, data);
@@ -178,6 +194,12 @@ public class TelegramBotService {
         } catch (TelegramApiException e) {
             log.error("Failed to send notification to user: {}", telegramId, e);
         }
+    }
+
+    private Long extractTelegramId(Update update) {
+        if (update.hasMessage()) return update.getMessage().getFrom().getId();
+        if (update.hasCallbackQuery()) return update.getCallbackQuery().getFrom().getId();
+        return null;
     }
 
     private void ensureUserExistsFromMessage(Message message) {

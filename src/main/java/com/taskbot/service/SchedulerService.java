@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Slf4j
@@ -53,7 +55,8 @@ public class SchedulerService {
             }
             try {
                 Long telegramId = user.getTelegramId();
-                LocalDate today = LocalDate.now();
+                ZoneId userZone = user.getZoneId();
+                LocalDate today = LocalDate.now(userZone);
                 List<com.taskbot.dto.EventDto> todayEvents = eventService.getEventsByDate(telegramId, today);
                 List<com.taskbot.dto.EventDto> upcoming = eventService.getUpcomingEvents(telegramId);
 

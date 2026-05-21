@@ -39,7 +39,7 @@ public class User {
 
     @Column(name = "timezone")
     @Builder.Default
-    private String timezone = "UTC";
+    private String timezone = "Europe/Berlin";
 
     @Column(name = "notifications_enabled")
     @Builder.Default

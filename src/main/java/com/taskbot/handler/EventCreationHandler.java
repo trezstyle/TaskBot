@@ -35,14 +35,23 @@ public class EventCreationHandler {
     private final Map<Long, String> states = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, String>> tempData = new ConcurrentHashMap<>();
 
+    // Lock object per user to prevent race between cancel and state reads
+    private final Map<Long, Object> userLocks = new ConcurrentHashMap<>();
+
+    private Object getLock(Long telegramId) {
+        return userLocks.computeIfAbsent(telegramId, k -> new Object());
+    }
+
     public boolean isInCreationFlow(Long telegramId) {
         String state = states.get(telegramId);
         return STATE_DATE.equals(state) || STATE_TITLE.equals(state);
     }
 
     public void cancelCreation(Long telegramId) {
-        states.remove(telegramId);
-        tempData.remove(telegramId);
+        synchronized (getLock(telegramId)) {
+            states.remove(telegramId);
+            tempData.remove(telegramId);
+        }
     }
 
     /**
@@ -284,7 +293,11 @@ String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
         Map<String, String> temp = tempData.get(telegramId);
         if (temp == null || title == null || title.isBlank()) return;
 
-        temp.put("title", title.trim());
+        String trimmed = title.trim();
+        if (trimmed.length() > 255) {
+            trimmed = trimmed.substring(0, 255);
+        }
+        temp.put("title", trimmed);
         createEvent(telegramId, messageId);
     }
 

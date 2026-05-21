@@ -97,12 +97,11 @@ public class EventService {
     @Transactional
     public int deleteAllPastEvents(Long telegramId) {
         User user = userService.getUserByTelegramId(telegramId);
-        List<Event> pastEvents = eventRepository.findByUserIdAndEventDateLessThanOrderByEventDateDescEventTimeDesc(
-                user.getId(), LocalDate.now());
-        int count = pastEvents.size();
-        eventRepository.deleteAll(pastEvents);
+        LocalDate today = LocalDate.now();
+        long count = eventRepository.countByUserIdAndEventDateLessThan(user.getId(), today);
+        eventRepository.deleteAllByUserIdAndEventDateLessThan(user.getId(), today);
         log.info("Deleted {} past events for user {}", count, user.getId());
-        return count;
+        return (int) count;
     }
 
     @Transactional(readOnly = true)
