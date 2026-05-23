@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Compile
+        run: mvn compile -B -q
+
+      - name: Run tests
+        run: mvn test -B
+        env:
+          POSTGRES_PASSWORD: test_password
+          BOT_TOKEN: test_token
+          BOT_USERNAME: test_bot
+          BOT_WEBHOOK_URL: http://localhost:8080/webhook
+          ENCRYPTION_SECRET_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+
+      - name: Package JAR
+        run: mvn package -DskipTests -B -q
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskbot-jar
+          path: target/*.jar
+          retention-days: 5
+
+  docker:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: taskbot-app:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

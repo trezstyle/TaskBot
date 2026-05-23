@@ -1,0 +1,36 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+
+  flyway:
+    enabled: false
+
+bot:
+  enabled: false
+  token: test_token
+  username: test_bot
+  webhook-url: http://localhost:8080/webhook
+
+encryption:
+  secret-key: 0000000000000000000000000000000000000000000000000000000000000000
+
+rate-limiting:
+  capacity: 30
+  refill-per-minute: 20
+
+admin:
+  telegram-ids: "123456789"
+
+cors:
+  allowed-origins: ""
+
+stt:
+  enabled: false
