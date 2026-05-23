@@ -141,10 +141,23 @@ public class EventService {
         return eventRepository.findDueReminders(today, now);
     }
 
+    @Transactional(readOnly = true)
+    public List<Event> getDueRemindersForUser(Long userId, LocalDate today, LocalDateTime now) {
+        return eventRepository.findDueRemindersForUser(userId, today, now);
+    }
+
     @Transactional
     public void markReminderSent(Long eventId) {
         eventRepository.findById(eventId).ifPresent(event -> {
             event.setReminderSent(true);
+            eventRepository.save(event);
+        });
+    }
+
+    @Transactional
+    public void markReminderSentReset(Long eventId) {
+        eventRepository.findById(eventId).ifPresent(event -> {
+            event.setReminderSent(false);
             eventRepository.save(event);
         });
     }

@@ -216,6 +216,7 @@ public class CalendarHandler {
 
         List<InlineKeyboardRow> rows = new ArrayList<>();
         rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("✏️ Edit").callbackData("EVT_EDIT_" + eventId).build(),
                 InlineKeyboardButton.builder().text("🗑 Delete").callbackData("EVT_DELETE_" + eventId).build()
         ));
 

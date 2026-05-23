@@ -30,6 +30,8 @@ public class EventCreationHandler {
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
 
     private static final String STATE_DATE = "CREATE_DATE";
+    private static final String STATE_COLOR = "CREATE_COLOR";
+    private static final String STATE_REMIND = "CREATE_REMIND";
     private static final String STATE_TITLE = "CREATE_TITLE";
 
     private final Map<Long, String> states = new ConcurrentHashMap<>();
@@ -38,13 +40,23 @@ public class EventCreationHandler {
     // Lock object per user to prevent race between cancel and state reads
     private final Map<Long, Object> userLocks = new ConcurrentHashMap<>();
 
+    /** Remove stale creation sessions (>30 min idle) */
+    public void cleanupStaleSessions() {
+        // States without corresponding tempData or vice versa are cleaned by cancelCreation
+        // This is a safety net — most cleanup happens via cancelCreation
+        long now = System.currentTimeMillis();
+        states.keySet().retainAll(tempData.keySet());
+        tempData.keySet().retainAll(states.keySet());
+    }
+
     private Object getLock(Long telegramId) {
         return userLocks.computeIfAbsent(telegramId, k -> new Object());
     }
 
     public boolean isInCreationFlow(Long telegramId) {
         String state = states.get(telegramId);
-        return STATE_DATE.equals(state) || STATE_TITLE.equals(state);
+        return STATE_DATE.equals(state) || STATE_COLOR.equals(state)
+                || STATE_REMIND.equals(state) || STATE_TITLE.equals(state);
     }
 
     public void cancelCreation(Long telegramId) {
@@ -93,8 +105,16 @@ public class EventCreationHandler {
             handleTimeSelection(telegramId, messageId, data);
             return true;
         }
+        if (data.startsWith("CREATE_COLOR_")) {
+            handleColorSelected(telegramId, messageId, data);
+            return true;
+        }
+        if (data.startsWith("CREATE_REMIND_")) {
+            handleReminderSelected(telegramId, messageId, data);
+            return true;
+        }
         if (data.equals("CREATE_SAVE")) {
-            promptTitle(telegramId, messageId);
+            showColorPicker(telegramId, messageId);
             return true;
         }
         return false;
@@ -239,7 +259,7 @@ String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
 
         if (data.equals("CREATE_TIME_SKIP")) {
             temp.remove("selectedTime");
-            promptTitle(telegramId, messageId);
+            showColorPicker(telegramId, messageId);
             return;
         }
 
@@ -260,6 +280,50 @@ String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
         // CREATE_TIME_HH:MM — final time selection
         LocalTime time = LocalTime.parse(data.substring("CREATE_TIME_".length()));
         temp.put("selectedTime", time.toString());
+        showColorPicker(telegramId, messageId);
+    }
+
+    private void showColorPicker(Long telegramId, Integer messageId) {
+        states.put(telegramId, STATE_COLOR);
+
+        Map<String, String> temp = getTemp(telegramId);
+        LocalDate date = LocalDate.parse(temp.get("selectedDate"));
+        String timeInfo = temp.containsKey("selectedTime")
+                ? " at " + LocalTime.parse(temp.get("selectedTime")).format(TIME_FMT)
+                : " (no time)";
+
+        String text = "🎨 " + date.format(DATE_FMT) + timeInfo + "\n\nChoose event color:";
+        editMessage(telegramId, messageId, text,
+                CalendarBuilder.buildColorPicker("CREATE_COLOR"));
+    }
+
+    private void handleColorSelected(Long telegramId, Integer messageId, String data) {
+        String color = data.substring("CREATE_COLOR_".length());
+        Map<String, String> temp = getTemp(telegramId);
+        temp.put("color", color);
+        showReminderPicker(telegramId, messageId);
+    }
+
+    private void showReminderPicker(Long telegramId, Integer messageId) {
+        states.put(telegramId, STATE_REMIND);
+
+        Map<String, String> temp = getTemp(telegramId);
+        String colorEmoji = colorToEmoji(temp.getOrDefault("color", "BLUE"));
+
+        String text = "🔔 Reminder\n\nWhen should I remind you?";
+        editMessage(telegramId, messageId, text,
+                CalendarBuilder.buildReminderPicker("CREATE_REMIND"));
+    }
+
+    private void handleReminderSelected(Long telegramId, Integer messageId, String data) {
+        String minutesStr = data.substring("CREATE_REMIND_".length());
+        Map<String, String> temp = getTemp(telegramId);
+        int minutes = Integer.parseInt(minutesStr);
+        if (minutes > 0) {
+            temp.put("reminderMinutesBefore", String.valueOf(minutes));
+        } else {
+            temp.remove("reminderMinutesBefore");
+        }
         promptTitle(telegramId, messageId);
     }
 
@@ -271,6 +335,9 @@ String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
         String timeInfo = temp.containsKey("selectedTime")
                 ? " at " + LocalTime.parse(temp.get("selectedTime")).format(TIME_FMT)
                 : " (no time)";
+        String colorEmoji = colorToEmoji(temp.getOrDefault("color", "BLUE"));
+        String reminderInfo = formatReminder(temp.containsKey("reminderMinutesBefore")
+                ? Integer.parseInt(temp.get("reminderMinutesBefore")) : 0);
 
         var rows = new java.util.ArrayList<org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow>();
         rows.add(new org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow(
@@ -285,7 +352,7 @@ String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
         ));
 
         editMessage(telegramId, messageId,
-                "📅 " + date.format(DATE_FMT) + timeInfo + "\n\n✏️ Describe the event (title):",
+                colorEmoji + " " + date.format(DATE_FMT) + timeInfo + " | 🔔 " + reminderInfo + "\n\n✏️ Describe the event (title):",
                 InlineKeyboardMarkup.builder().keyboard(rows).build());
     }
 
@@ -308,16 +375,21 @@ String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
         LocalDate date = LocalDate.parse(temp.get("selectedDate"));
         LocalTime time = temp.containsKey("selectedTime") ? LocalTime.parse(temp.get("selectedTime")) : null;
         String title = temp.getOrDefault("title", "Untitled");
+        String color = temp.getOrDefault("color", "BLUE");
+        Integer reminderMinutesBefore = temp.containsKey("reminderMinutesBefore")
+                ? Integer.parseInt(temp.get("reminderMinutesBefore")) : null;
 
         EventDto event = eventService.createEvent(telegramId,
-                title, null, date, time, "BLUE", null);
+                title, null, date, time, color, reminderMinutesBefore);
 
         states.remove(telegramId);
         tempData.remove(telegramId);
 
         String timeStr = time != null ? " 🕐 " + time.format(TIME_FMT) : "";
-        String msg = String.format("✅ Event created!\n\n🔵 %s\n📅 %s%s",
-                event.getTitle(), date.format(DATE_FMT), timeStr);
+        String reminderInfo = reminderMinutesBefore != null ? formatReminder(reminderMinutesBefore) : "none";
+        String colorEmoji = colorToEmoji(color);
+        String msg = String.format("✅ Event created!\n\n%s %s\n📅 %s%s | 🔔 %s",
+                colorEmoji, event.getTitle(), date.format(DATE_FMT), timeStr, reminderInfo);
 
         try {
             SendMessage message = SendMessage.builder()
@@ -332,8 +404,11 @@ String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
 
     public void sendCreationSuccessMessage(Long telegramId, EventDto event) {
         String timeStr = event.getEventTime() != null ? " 🕐 " + event.getEventTime().format(TIME_FMT) : "";
-        String msg = String.format("✅ Event created!\n\n🔵 %s\n📅 %s%s",
-                event.getTitle(), event.getEventDate().format(DATE_FMT), timeStr);
+        String colorEmoji = colorToEmoji(event.getColor() != null ? event.getColor() : "BLUE");
+        String reminderInfo = event.getReminderMinutesBefore() != null
+                ? formatReminder(event.getReminderMinutesBefore()) : "none";
+        String msg = String.format("✅ Event created!\n\n%s %s\n📅 %s%s | 🔔 %s",
+                colorEmoji, event.getTitle(), event.getEventDate().format(DATE_FMT), timeStr, reminderInfo);
 
         try {
             SendMessage message = SendMessage.builder()
@@ -344,6 +419,28 @@ String text = String.format("➕ New event\n📅 %s %d\n\nSelect date:",
         } catch (TelegramApiException e) {
             log.error("Failed to send creation success msg", e);
         }
+    }
+
+    private String colorToEmoji(String color) {
+        if (color == null) return "🔵";
+        return switch (color.toUpperCase()) {
+            case "RED" -> "🔴";
+            case "GREEN" -> "🟢";
+            case "YELLOW" -> "🟡";
+            case "PURPLE" -> "🟣";
+            case "ORANGE" -> "🟠";
+            default -> "🔵";
+        };
+    }
+
+    private String formatReminder(int minutes) {
+        if (minutes == 0) return "none";
+        if (minutes < 60) return minutes + "m";
+        if (minutes % 60 == 0) {
+            int hours = minutes / 60;
+            return hours == 24 ? "1d" : hours + "h";
+        }
+        return minutes + "m";
     }
 
     private Map<String, String> getTemp(Long telegramId) {

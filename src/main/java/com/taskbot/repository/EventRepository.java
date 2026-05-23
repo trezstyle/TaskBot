@@ -36,5 +36,13 @@ public interface EventRepository extends JpaRepository<Event, Long> {
             nativeQuery = true)
     List<Event> findDueReminders(@Param("today") LocalDate today, @Param("now") java.time.LocalDateTime now);
 
+    @Query(value = "SELECT * FROM events e WHERE e.reminder_sent = false " +
+            "AND e.reminder_minutes_before IS NOT NULL " +
+            "AND e.event_date = :today AND e.event_time IS NOT NULL " +
+            "AND e.user_id = :userId " +
+            "AND EXTRACT(EPOCH FROM (CAST(:now AS timestamp) - (CAST(e.event_date AS date) + CAST(e.event_time AS time)))) / 60 >= e.reminder_minutes_before",
+            nativeQuery = true)
+    List<Event> findDueRemindersForUser(@Param("userId") Long userId, @Param("today") LocalDate today, @Param("now") java.time.LocalDateTime now);
+
     long countByUserId(Long userId);
 }

@@ -2,9 +2,9 @@ package com.taskbot.service;
 
 import com.taskbot.handler.CalendarHandler;
 import com.taskbot.handler.EventCreationHandler;
+import com.taskbot.handler.EventEditHandler;
 import com.taskbot.security.RateLimitingService;
 import com.taskbot.service.SpeechToTextService;
-import com.taskbot.util.CalendarBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,6 +28,7 @@ public class TelegramBotService {
     private final RateLimitingService rateLimitingService;
     private final CalendarHandler calendarHandler;
     private final EventCreationHandler creationHandler;
+    private final EventEditHandler editHandler;
     private final SpeechToTextService speechToTextService;
 
     public void processUpdate(Update update) {
@@ -68,15 +69,23 @@ public class TelegramBotService {
         String text = message.getText() != null ? message.getText().trim() : "";
         log.info("Message from {}: '{}'", telegramId, text.length() > 50 ? text.substring(0, 50) : text);
 
-        // Commands always work, even in creation flow
+        // Commands always work, even in creation/edit flow
         if ("/start".equals(text) || "/cancel".equals(text)) {
             if (creationHandler.isInCreationFlow(telegramId)) {
                 creationHandler.cancelCreation(telegramId);
+            }
+            if (editHandler.isInEditFlow(telegramId)) {
+                editHandler.cancelEdit(telegramId);
             }
             if ("/cancel".equals(text)) {
                 sendMessage(telegramId, "❌ Cancelled.", null);
             }
             calendarHandler.showCalendar(telegramId, LocalDate.now());
+            return;
+        }
+
+        if (editHandler.isInEditFlow(telegramId)) {
+            editHandler.handleTextInput(telegramId, message.getMessageId(), text);
             return;
         }
 
@@ -122,6 +131,17 @@ public class TelegramBotService {
             } else {
                 sendMessage(telegramId, "🎙 Could not recognize. Please type the title:", null);
             }
+        } else if (editHandler.isInEditFlow(telegramId)) {
+            // User is in edit flow - transcribe voice as new title
+            sendMessage(telegramId, "🎙 Transcribing...", null);
+            String text = speechToTextService.transcribeVoice(voice.getFileId(), telegramClient);
+
+            if (text != null && !text.isBlank()) {
+                sendMessage(telegramId, "📝 Recognized: " + text, null);
+                editHandler.handleTextInput(telegramId, message.getMessageId(), text);
+            } else {
+                sendMessage(telegramId, "🎙 Could not recognize. Please type the new title:", null);
+            }
         } else {
             // Not in creation flow - start quick event from voice
             sendMessage(telegramId, "🎙 Transcribing...", null);
@@ -158,8 +178,30 @@ public class TelegramBotService {
             return;
         }
 
+        if (editHandler.isInEditFlow(telegramId)) {
+            if (editHandler.handleCallback(telegramId, messageId, data)) {
+                return;
+            }
+            // If not handled by edit handler, fall through to normal routing
+        }
+
+        if (data.startsWith("EVT_EDIT_TITLE_") || data.startsWith("EVT_EDIT_DATE_")
+                || data.startsWith("EVT_EDIT_TIME_") || data.startsWith("EVT_EDIT_COLOR_")
+                || data.startsWith("EVT_EDIT_REMIND_") || data.startsWith("EVT_EDIT_CLR_")
+                || data.startsWith("EVT_EDIT_REM_") || data.startsWith("EVT_EDIT_")) {
+            editHandler.handleCallback(telegramId, messageId, data);
+            return;
+        }
+
+        // Edit sub-flow callbacks (calendar navigation, time picker, etc.)
+        if (data.startsWith("EDIT_")) {
+            editHandler.handleCallback(telegramId, messageId, data);
+            return;
+        }
+
         if (data.equals("MENU_MAIN")) {
             creationHandler.cancelCreation(telegramId);
+            editHandler.cancelEdit(telegramId);
             calendarHandler.showCalendar(telegramId, LocalDate.now());
             return;
         }
@@ -174,6 +216,7 @@ public class TelegramBotService {
         }
 
         if (data.equals("CAL_ADD")) {
+            editHandler.cancelEdit(telegramId);
             creationHandler.startCreateEvent(telegramId, messageId);
             return;
         }
